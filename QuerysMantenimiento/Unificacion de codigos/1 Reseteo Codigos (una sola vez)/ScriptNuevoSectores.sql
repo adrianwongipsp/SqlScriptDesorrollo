@@ -23,14 +23,17 @@
 	idCamaronera  ,
 	codigoZona as codigoZonaNew,
 	nombreZona as nombreZonaNew,
-	FORMAT(DENSE_RANK() OVER ( ORDER BY codigoZona, codigoCamaronera), '00000') as codigoCamaroneraNew,
+	--FORMAT(DENSE_RANK() OVER ( ORDER BY codigoZona, codigoCamaronera), '00000') as codigoCamaroneraNew,
+    RIGHT('00000' + cast(idCamaronera  as varchar(5)),5) as codigoCamaroneraNew,
 	nombreCamaronera as nombreCamaroneraNew,
-	FORMAT(ROW_NUMBER() OVER (ORDER BY codigoZona), '00000') as codigoSectorNew,
+	--FORMAT(ROW_NUMBER() OVER (ORDER BY codigoZona), '00000') as idSector,
+	RIGHT('00000' + cast(idSector  as varchar(5)),5) as idSector,
 	nombreSector as nombreSectorNew
-   into #zonficacionHomologarCodigo
+ ---  into #zonficacionHomologarCodigo
  from 
   BaseCTE
   
+
 
 
  
