@@ -138,7 +138,55 @@ BEGIN TRY
 	INSERT INTO #TMP_AJUSTE_MASIVO(NUEVOZONA, ID_ZONA, COD_ZONA, ZONA, NUEVOCAMARONERA, ID_CAMARONERA, COD_CAMARONERA, CAMARONERA, ID_SECTOR, COD_SECTOR, SECTOR, CAMBIO, NUEVOMZONA, ID_MZONA, COD_MZONA, MEGAZONA) VALUES (1,0,'00','CALIFORNIAB',1,0,'00000','CALIFORNIAB',17,'00017','SANFRANCISCO',1,1,0,'00','CALIFORNIA');
 	INSERT INTO #TMP_AJUSTE_MASIVO(NUEVOZONA, ID_ZONA, COD_ZONA, ZONA, NUEVOCAMARONERA, ID_CAMARONERA, COD_CAMARONERA, CAMARONERA, ID_SECTOR, COD_SECTOR, SECTOR, CAMBIO, NUEVOMZONA, ID_MZONA, COD_MZONA, MEGAZONA) VALUES (1,0,'00','CALIFORNIAB',1,0,'00000','CALIFORNIAB',18,'00018','SANTAMONICA',1,1,0,'00','CALIFORNIA');
 	INSERT INTO #TMP_AJUSTE_MASIVO(NUEVOZONA, ID_ZONA, COD_ZONA, ZONA, NUEVOCAMARONERA, ID_CAMARONERA, COD_CAMARONERA, CAMARONERA, ID_SECTOR, COD_SECTOR, SECTOR, CAMBIO, NUEVOMZONA, ID_MZONA, COD_MZONA, MEGAZONA) VALUES (1,0,'00','CALIFORNIAB',1,0,'00000','CALIFORNIAB',19,'00019','SANTAROSA',1,1,0,'00','CALIFORNIA');
+	
+		UPDATE x 
+		set x.ID_ZONA=z.idZona
+		,x.COD_ZONA=z.codigo
+		--x.ZONA=.nombre,
+		,x.ID_CAMARONERA=c.idCamaronera
+		,x.COD_CAMARONERA=c.codigo 
+		--c.nombre ,
+		,x.ID_SECTOR=s.idSector
+		,x.COD_SECTOR=s.codigo 
+		--s.nombre 
+		,x.ID_MZONA=mz.idMegaZona
+		,x.COD_MZONA=mz.codigo 
+		--,mz.nombre 
+		FROM  #TMP_AJUSTE_MASIVO x
+		left join parZona z WITH(NOLOCK) ON
+		z.nombre=x.ZONA
+		left join parCamaronera c WITH(NOLOCK) ON
+		 c.nombre=x.CAMARONERA       
+		left join parSector  s WITH(NOLOCK) ON
+		 s.nombre=x.SECTOR 
+		left join parMegaZona  mz WITH(NOLOCK) ON
+		mz.nombre = x.MEGAZONA  
 
+		
+		--SELECT DISTINCT
+		--z.idZona,
+		--z.codigo, 
+		--z.nombre AS nombreZona,
+		--c.idCamaronera,
+		--c.codigo AS codigoCamaronera, 
+		--c.nombre AS nombreCamaronera,
+		--s.idSector,
+		--s.codigo codigoSector, 
+		--s.nombre nombreSector
+		--,mz.idMegaZona
+		--,mz.codigo AS codigoMZona 
+		--,mz.nombre AS nombreMZona
+		--FROM  #TMP_AJUSTE_MASIVO x
+		--left join parZona z WITH(NOLOCK) ON
+		--z.nombre=x.ZONA
+		--left join parCamaronera c WITH(NOLOCK) ON
+		-- c.nombre=x.CAMARONERA       
+		--left join parSector  s WITH(NOLOCK) ON
+		-- s.nombre=x.SECTOR 
+		--left join parMegaZona  mz WITH(NOLOCK) ON
+		--mz.nombre = x.MEGAZONA  
+	
+	
 	-----megazona
 	IF NOT EXISTS(SELECT * FROM parMegaZona WHERE nombre IN(SELECT MEGAZONA FROM #TMP_AJUSTE_MASIVO WHERE NUEVOMZONA=1))
 	BEGIN
@@ -472,6 +520,7 @@ BEGIN TRY
 	SELECT * FROM #TMP_AJUSTE_MASIVO
 	IF NOT OBJECT_ID('tempdb..#TMP_AJUSTE_MASIVO') IS NULL  DROP TABLE #TMP_AJUSTE_MASIVO
 	SELECT * FROM parMegaUbicaciones
+	
 
 END TRY 
 BEGIN CATCH 
