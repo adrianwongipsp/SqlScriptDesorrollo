@@ -1,15 +1,30 @@
   with BaseCTE as (
- select distinct
-	codigoZona,
-	nombreZona,
-	codigoCamaronera,
-	nombreCamaronera,
-	codigoSector,
-	nombreSector,
-	idZona,
-	idSector,
-	idCamaronera 
- from PiscinaUbicacion
+ --select distinct
+	--codigoZona,
+	--nombreZona,
+	--codigoCamaronera,
+	--nombreCamaronera,
+	--codigoSector,
+	--nombreSector,
+	--idZona,
+	--idSector,
+	--idCamaronera 
+ --from PiscinaUbicacion
+ SELECT  DISTINCT 
+ z.codigo AS codigoZona, 
+ z.nombre AS nombreZona,
+ c.codigo AS codigoCamaronera, 
+ c.nombre AS nombreCamaronera, 
+ s.codigo codigoSector, 
+ s.nombre nombreSector,
+ z.idZona,
+ s.idSector,
+ c.idCamaronera 
+FROM  parZona z WITH(NOLOCK) 
+          inner join parCamaronera c WITH(NOLOCK) ON
+		  c.idZona = z.idZona        
+		  inner join parSector  s WITH(NOLOCK) ON
+		  s.idCamaronera = c.idCamaronera  
  )
  select	
     codigoZona as codigoZonaOld,
@@ -27,9 +42,9 @@
     RIGHT('00000' + cast(idCamaronera  as varchar(5)),5) as codigoCamaroneraNew,
 	nombreCamaronera as nombreCamaroneraNew,
 	--FORMAT(ROW_NUMBER() OVER (ORDER BY codigoZona), '00000') as idSector,
-	RIGHT('00000' + cast(idSector  as varchar(5)),5) as idSector,
+	RIGHT('00000' + cast(idSector  as varchar(5)),5) as codigosectorNew,
 	nombreSector as nombreSectorNew
- ---  into #zonficacionHomologarCodigo
+   into #zonficacionHomologarCodigo
  from 
   BaseCTE
   
@@ -144,6 +159,7 @@
 		 ON     PCP.zona       = MP.codigozonaOld
 		  AND   PCP.camaronera = MP.codigocamaroneraOld
 		  AND   PCP.sector     = MP.codigosectorOld 
+
 
 		----TABLA: MUESTREOPESO
 		UPDATE PMP SET 
