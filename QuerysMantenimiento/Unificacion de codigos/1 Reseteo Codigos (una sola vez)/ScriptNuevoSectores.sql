@@ -1,4 +1,7 @@
-  with BaseCTE as (
+ IF NOT OBJECT_ID('tempdb..#zonficacionHomologarCodigo') IS NULL  DROP TABLE #zonficacionHomologarCodigo
+ GO 
+ 
+ with BaseCTE as (
  --select distinct
 	--codigoZona,
 	--nombreZona,
