@@ -1,4 +1,4 @@
-USE IPSPCamaroneraProduccionOswaldito
+USE IPSPCamaroneraProduccion_Test
 GO
 
 IF NOT OBJECT_ID('tempdb..#TMP_AJUSTE_MASIVO') IS NULL  DROP TABLE #TMP_AJUSTE_MASIVO
@@ -9,14 +9,17 @@ CREATE TABLE #TMP_AJUSTE_MASIVO
 	ID_ZONA INT,
 	COD_ZONA VARCHAR(10),
     ZONA VARCHAR(80),
+	COD_ZONA_OLD VARCHAR(10),
 	NUEVOCAMARONERA INT,
     ID_CAMARONERA INT,
 	COD_CAMARONERA VARCHAR(10),
 	CAMARONERA VARCHAR(80),
+	COD_CAMARONERA_OLD VARCHAR(10),
     ID_SECTOR INT,
 	COD_SECTOR VARCHAR(10),
 	SECTOR VARCHAR(80),
 	CAMBIO INT,
+	CODIGO_SECTOR_OLD  VARCHAR(10),
 	NUEVOMZONA INT,
 	ID_MZONA INT,
 	COD_MZONA VARCHAR(10),
@@ -157,7 +160,7 @@ begin tran
 		--x.ZONA=.nombre,
 		FROM  #TMP_AJUSTE_MASIVO x
 		inner join parZona z WITH(NOLOCK) ON
-		z.nombre=x.ZONA where z.activo = 1
+		z.nombre=x.ZONA-- where z.activo = 1
 
 
 
@@ -167,7 +170,7 @@ begin tran
 		--c.nombre ,
 		FROM  #TMP_AJUSTE_MASIVO x
 		inner join parCamaronera c WITH(NOLOCK) ON
-		c.nombre=x.CAMARONERA  where c.activo = 1
+		c.nombre=x.CAMARONERA -- where c.activo = 1
 		
 		UPDATE x 
 		set x.ID_SECTOR=s.idSector
@@ -175,31 +178,9 @@ begin tran
 		--s.nombre 
 		FROM  #TMP_AJUSTE_MASIVO x		     
 		inner join parSector  s WITH(NOLOCK) ON
-		s.nombre=x.SECTOR where s.activo = 1
+		s.nombre=x.SECTOR --where s.activo = 1
  
  ---SELECT '#TMP_AJUSTE_MASIVO' AS TABLA,* FROM #TMP_AJUSTE_MASIVO
-		--SELECT DISTINCT
-		--z.idZona,
-		--z.codigo, 
-		--z.nombre AS nombreZona,
-		--c.idCamaronera,
-		--c.codigo AS codigoCamaronera, 
-		--c.nombre AS nombreCamaronera,
-		--s.idSector,
-		--s.codigo codigoSector, 
-		--s.nombre nombreSector
-		--,mz.idMegaZona
-		--,mz.codigo AS codigoMZona 
-		--,mz.nombre AS nombreMZona
-		--FROM  #TMP_AJUSTE_MASIVO x
-		--left join parZona z WITH(NOLOCK) ON
-		--z.nombre=x.ZONA
-		--left join parCamaronera c WITH(NOLOCK) ON
-		-- c.nombre=x.CAMARONERA       
-		--left join parSector  s WITH(NOLOCK) ON
-		-- s.nombre=x.SECTOR 
-		--left join parMegaZona  mz WITH(NOLOCK) ON
-		--mz.nombre = x.MEGAZONA  
 
 
 	-----megazona
@@ -243,34 +224,26 @@ begin tran
 			 UPDATE parSecuencial SET ultimaSecuencia = @idMaxMegaZona WHERE tabla ='megaZona'
 		  END
 
-		  UPDATE x 
-		  SET x.COD_MZONA= y.codigo,
-		      x.ID_MZONA=y.idMegaZona
-		  FROM #TMP_AJUSTE_MASIVO x,
-		  parMegaZona y WITH(NOLOCK)
-		  WHERE y.nombre = x.MEGAZONA
-		  AND x.NUEVOMZONA=1
 
 	END
-	--ELSE
-	--BEGIN
-	--      UPDATE x 
-	--	  SET x.COD_MZONA= y.codigo,
-	--	      x.ID_MZONA=y.idMegaZona
-	--	  FROM #TMP_AJUSTE_MASIVO x,
-	--	  parMegaZona y WITH(NOLOCK)
-	--	  WHERE y.nombre = x.MEGAZONA
-	--END
+
+	      UPDATE x 
+		  SET x.COD_MZONA= y.codigo,
+		      x.ID_MZONA=y.idMegaZona
+		  FROM #TMP_AJUSTE_MASIVO x
+		  inner join parMegaZona y WITH(NOLOCK) ON  x.MEGAZONA=y.nombre 
+		  --WHERE y.activo=1
 
 	      UPDATE x 
 		  SET x.activo= 0,
 		      x.fechaHoraModificacion=GETDATE(),
 			  x.usuarioModificacion='adminPsCam'
 		  FROM  parMegaZona x WITH(NOLOCK)
-		  WHERE  NOT EXISTS (SELECT * FROM #TMP_AJUSTE_MASIVO WHERE MEGAZONA = x.nombre)
+		  WHERE  NOT EXISTS (SELECT distinct  MEGAZONA FROM #TMP_AJUSTE_MASIVO WHERE MEGAZONA = x.nombre)
+		  AND x.activo=1
 
 	----zona
-    IF NOT EXISTS(SELECT * FROM parZona WITH(NOLOCK) WHERE nombre IN(SELECT ZONA FROM #TMP_AJUSTE_MASIVO WHERE NUEVOZONA=1))
+    IF NOT EXISTS(SELECT * FROM parZona WITH(NOLOCK) WHERE nombre IN(SELECT ZONA FROM #TMP_AJUSTE_MASIVO WHERE NUEVOZONA=1) AND activo=1)
 	BEGIN
 	     DECLARE @idZona INT 
 		 DECLARE @idMaxZona INT 
@@ -317,36 +290,37 @@ begin tran
 			 UPDATE parSecuencial SET ultimaSecuencia = @idMaxZona WHERE tabla ='Zona'
 		  END
 
-		  --UPDATE x 
-		  --SET x.COD_ZONA= y.codigo,
-		  --    x.ID_ZONA=y.idZona
-		  --FROM #TMP_AJUSTE_MASIVO x,
-		  --parZona y WITH(NOLOCK)
-		  --WHERE y.nombre = x.ZONA
-		  --AND x.NUEVOZONA=1
+
 
 	END
-	--ELSE
-	--BEGIN
+
 	      UPDATE x 
 		  SET x.COD_ZONA= y.codigo,
 		      x.ID_ZONA=y.idZona
-		  FROM #TMP_AJUSTE_MASIVO x,
-		  parZona y WITH(NOLOCK)
-		  WHERE y.nombre = x.ZONA
-	--END
+		  FROM #TMP_AJUSTE_MASIVO x
+		  inner join parZona y WITH(NOLOCK) ON y.nombre = x.ZONA
+		  --WHERE y.activo=1
+
 	SELECT '#TMP_AJUSTE_MASIVO' AS TABLA,* FROM #TMP_AJUSTE_MASIVO
-		      UPDATE x 
+
+		UPDATE x 
+		  SET x.idMegaZona = (SELECT distinct ID_MZONA  FROM #TMP_AJUSTE_MASIVO tam WHERE tam.ZONA =x.nombre AND NUEVOZONA=1),
+		      x.fechaHoraModificacion=GETDATE(),
+			  x.usuarioModificacion='adminPsCam'
+		  FROM  parZona x WITH(NOLOCK)
+		  --WHERE x.activo=1
+
+		  UPDATE x 
 		  SET x.activo= 0,
 		      x.fechaHoraModificacion=GETDATE(),
 			  x.usuarioModificacion='adminPsCam'
 		  FROM  parZona x WITH(NOLOCK)
-		  WHERE  NOT EXISTS (SELECT * FROM #TMP_AJUSTE_MASIVO WHERE ZONA = x.nombre)
-			
-			--IF NOT EXISTS(SELECT * FROM parCamaronera  WITH(NOLOCK) WHERE nombre IN(SELECT CAMARONERA FROM #TMP_AJUSTE_MASIVO WHERE NUEVOCAMARONERA=1) AND activo=1)
-			--print('hola .......')
+		  LEFT JOIN #TMP_AJUSTE_MASIVO tam ON x.nombre = tam.ZONA
+		  WHERE tam.ZONA IS NULL
+		 AND x.activo = 1;
 
 
+ 
 		----camaronera
     IF NOT EXISTS(SELECT * FROM parCamaronera  WITH(NOLOCK) WHERE nombre IN(SELECT CAMARONERA FROM #TMP_AJUSTE_MASIVO WHERE NUEVOCAMARONERA=1) AND activo=1)
 	BEGIN
@@ -375,7 +349,7 @@ begin tran
 		  ,''
 		  FROM #TMP_AJUSTE_MASIVO
 		  WHERE NUEVOCAMARONERA=1
-		  AND NOT EXISTS (SELECT * FROM parCamaronera WITH(NOLOCK) WHERE nombre = CAMARONERA  ) --AND idZona=ID_ZONA)
+		  AND NOT EXISTS (SELECT  *FROM parCamaronera WITH(NOLOCK) WHERE nombre = CAMARONERA  ) --AND idZona=ID_ZONA)
 		  GROUP BY CAMARONERA, ID_ZONA
 
 		  SELECT @idMax = MAX(idCamaronera) FROM parCamaronera WITH(NOLOCK)
@@ -388,44 +362,33 @@ begin tran
 			 UPDATE parSecuencial SET ultimaSecuencia = @idMax WHERE tabla ='Camaronera'
 		  END
 
-		  --UPDATE x 
-		  --SET x.COD_CAMARONERA= y.codigo,
-		  --    x.ID_CAMARONERA=y.idCamaronera
-
-		  --FROM #TMP_AJUSTE_MASIVO x
-		  --INNER JOIN parCamaronera y WITH(NOLOCK) ON
-		  --x.ID_ZONA=y.idZona AND y.nombre = x.CAMARONERA
-		  --WHERE y.nombre = x.CAMARONERA
-		  ----AND y.idZona=x.ID_ZONA
-		  --AND x.NUEVOCAMARONERA=1
-
-		  --UPDATE x 
-		  --SET x.COD_CAMARONERA= y.codigo,
-		  --    x.ID_CAMARONERA=y.idCamaronera
-		  --FROM #TMP_AJUSTE_MASIVO x,
-		  --parCamaronera y WITH(NOLOCK)
-		  --WHERE y.nombre = x.CAMARONERA
-
 	END
-	--ELSE
-	--BEGIN
+
 	      UPDATE x 
 		  SET x.COD_CAMARONERA= y.codigo,
 		      x.ID_CAMARONERA=y.idCamaronera
-		  FROM #TMP_AJUSTE_MASIVO x,
-		  parCamaronera y WITH(NOLOCK)
-		  WHERE y.nombre = x.CAMARONERA
-	--END
+		  FROM #TMP_AJUSTE_MASIVO x
+		  INNER JOIN parCamaronera y WITH(NOLOCK) ON x.CAMARONERA=y.nombre 
+		  --WHERE  y.activo=1
+
+		 UPDATE x 
+		  SET x.idZona= (select distinct ID_ZONA from #TMP_AJUSTE_MASIVO where  CAMARONERA=x.nombre ),
+		      x.fechaHoraModificacion=GETDATE(),
+			  x.usuarioModificacion='adminPsCam'
+		  FROM  parCamaronera x WITH(NOLOCK)
+
 	SELECT ' finally #TMP_AJUSTE_MASIVO' AS TABLA,* FROM #TMP_AJUSTE_MASIVO
-	select '--Camaronera',* from parCamaronera where nombre ='korea'
-		select '--zona',* from parZona where nombre ='korea'
+	--select '--Camaronera',* from parCamaronera WITH(NOLOCK) where nombre ='KOREA'
+	--select '--zona',* from parZona WITH(NOLOCK) where  nombre ='KOREA'
+
 		  UPDATE x 
 		  SET x.activo= 0,
 		      x.fechaHoraModificacion=GETDATE(),
 			  x.usuarioModificacion='adminPsCam'
 		  FROM  parCamaronera x WITH(NOLOCK)
-		  WHERE  NOT EXISTS (SELECT * FROM #TMP_AJUSTE_MASIVO WHERE CAMARONERA = x.nombre)--  AND ID_ZONA=x.idZona)
-
+		  LEFT JOIN #TMP_AJUSTE_MASIVO tam ON x.nombre = tam.CAMARONERA
+		  WHERE tam.CAMARONERA IS NULL
+		  AND x.activo = 1;
 		  		--select * from parMegaZona WITH(NOLOCK) where activo=1
 				--select * from parZona WITH(NOLOCK)  where activo=1  order by nombre
 				--select * from parCamaronera WITH(NOLOCK)  where activo=1 order by idZona
@@ -460,7 +423,7 @@ begin tran
 		  ,''
 		  FROM #TMP_AJUSTE_MASIVO
 		  WHERE CAMBIO=2
-		  AND NOT EXISTS (SELECT * FROM parSector WITH(NOLOCK) WHERE nombre = SECTOR AND idCamaronera=ID_CAMARONERA )
+		  AND NOT EXISTS (SELECT distinct nombre FROM parSector WITH(NOLOCK) WHERE nombre = SECTOR)-- AND idCamaronera=ID_CAMARONERA )
 		  GROUP BY SECTOR, ID_CAMARONERA
 
 		  SELECT @idMaxs = MAX(idSector) FROM parSector WITH(NOLOCK)
@@ -473,92 +436,87 @@ begin tran
 			 UPDATE parSecuencial SET ultimaSecuencia = @idMaxs WHERE tabla ='Sector'
 		  END
 
-		  UPDATE x 
+	END
+
+	      UPDATE x 
 		  SET x.COD_SECTOR= y.codigo,
 		      x.ID_SECTOR=y.idSector
-		  FROM #TMP_AJUSTE_MASIVO x,
-		  parSector y WITH(NOLOCK)
-		  WHERE y.nombre = x.SECTOR
-		  AND idCamaronera=ID_CAMARONERA
-		  AND x.CAMBIO=2
+		  FROM #TMP_AJUSTE_MASIVO x
+		  inner join parSector y WITH(NOLOCK) ON  x.SECTOR=y.nombre 
 
-	END
-	--ELSE
-	--BEGIN
-	--      UPDATE x 
-	--	  SET x.COD_SECTOR= y.codigo,
-	--	      x.ID_SECTOR=y.idSector
-	--	  FROM #TMP_AJUSTE_MASIVO x,
-	--	  parSector y WITH(NOLOCK)
-	--	  WHERE y.nombre = x.SECTOR
-	--	  AND idCamaronera=ID_CAMARONERA
-	--END
 
-		      UPDATE x 
+
+		  UPDATE x 
+		  SET x.idCamaronera= (select distinct ID_CAMARONERA from #TMP_AJUSTE_MASIVO where  SECTOR=x.nombre ),
+		      x.fechaHoraModificacion=GETDATE(),
+			  x.usuarioModificacion='adminPsCam'
+		  FROM  parSector x WITH(NOLOCK)
+	
+
+
+		  UPDATE x 
 		  SET x.activo= 0,
 		      x.fechaHoraModificacion=GETDATE(),
 			  x.usuarioModificacion='adminPsCam'
 		  FROM  parSector x WITH(NOLOCK)
-		  WHERE  NOT EXISTS (SELECT * FROM #TMP_AJUSTE_MASIVO WHERE SECTOR = x.nombre AND ID_CAMARONERA=x.idCamaronera)
+		  LEFT JOIN #TMP_AJUSTE_MASIVO tam ON x.nombre = tam.SECTOR
+		  WHERE tam.SECTOR IS NULL
+		  AND x.activo = 1;
 
-	IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'parMegaUbicaciones' AND TABLE_SCHEMA = 'dbo')
-	BEGIN
-		--PRINT 'La tabla parMegaUbicaciones no existe. Creando la tabla...';
+	--IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'parMegaUbicaciones' AND TABLE_SCHEMA = 'dbo')
+	--BEGIN
+	--	--PRINT 'La tabla parMegaUbicaciones no existe. Creando la tabla...';
 
-		CREATE TABLE parMegaUbicaciones
-		(
-			NUEVOZONA INT,
-			ID_ZONA INT,
-			COD_ZONA VARCHAR(10),
-			ZONA VARCHAR(80),
-			NUEVOCAMARONERA INT,
-			ID_CAMARONERA INT,
-			COD_CAMARONERA VARCHAR(10),
-			CAMARONERA VARCHAR(80),
-			ID_SECTOR INT,
-			COD_SECTOR VARCHAR(10),
-			SECTOR VARCHAR(80),
-			CAMBIO INT,
-			NUEVOMZONA INT,
-			ID_MZONA INT,
-			COD_MZONA VARCHAR(10),
-			MEGAZONA VARCHAR(80),
-			FECHA DATETIME,
-		);
-
-		--PRINT 'Tabla parMegaUbicaciones creada exitosamente.';
-	END
-
-
-	INSERT INTO parMegaUbicaciones (
-    NUEVOZONA, ID_ZONA, COD_ZONA, ZONA, NUEVOCAMARONERA, ID_CAMARONERA, 
-    COD_CAMARONERA, CAMARONERA, ID_SECTOR, COD_SECTOR, SECTOR, CAMBIO, 
-    NUEVOMZONA, ID_MZONA, COD_MZONA, MEGAZONA, FECHA
-	)
-	SELECT 
-		t.NUEVOZONA, t.ID_ZONA, t.COD_ZONA, t.ZONA, t.NUEVOCAMARONERA, t.ID_CAMARONERA, 
-		t.COD_CAMARONERA, t.CAMARONERA, t.ID_SECTOR, t.COD_SECTOR, t.SECTOR, t.CAMBIO, 
-		t.NUEVOMZONA, t.ID_MZONA, t.COD_MZONA, t.MEGAZONA, GETDATE()
-	FROM 
-		#TMP_AJUSTE_MASIVO t
-	--WHERE 
-	--	NOT EXISTS (
-	--		SELECT 1 
-	--		FROM parMegaUbicaciones p WITH(NOLOCK)
-	--		WHERE p.ID_ZONA = t.ID_ZONA 
-	--		  AND p.ID_CAMARONERA = t.ID_CAMARONERA
-	--		  AND p.ID_SECTOR = t.ID_SECTOR
-	--		  AND p.ID_MZONA = t.ID_MZONA
+	--	CREATE TABLE parMegaUbicaciones
+	--	(
+	--		NUEVOZONA INT,
+	--		ID_ZONA INT,
+	--		COD_ZONA VARCHAR(10),
+	--		ZONA VARCHAR(80),
+	--		NUEVOCAMARONERA INT,
+	--		ID_CAMARONERA INT,
+	--		COD_CAMARONERA VARCHAR(10),
+	--		CAMARONERA VARCHAR(80),
+	--		ID_SECTOR INT,
+	--		COD_SECTOR VARCHAR(10),
+	--		SECTOR VARCHAR(80),
+	--		CAMBIO INT,
+	--		NUEVOMZONA INT,
+	--		ID_MZONA INT,
+	--		COD_MZONA VARCHAR(10),
+	--		MEGAZONA VARCHAR(80),
+	--		FECHA DATETIME,
 	--	);
+
+	--	--PRINT 'Tabla parMegaUbicaciones creada exitosamente.';
+	--END
+
+
+	--INSERT INTO parMegaUbicaciones (
+ --   NUEVOZONA, ID_ZONA, COD_ZONA, ZONA, NUEVOCAMARONERA, ID_CAMARONERA, 
+ --   COD_CAMARONERA, CAMARONERA, ID_SECTOR, COD_SECTOR, SECTOR, CAMBIO, 
+ --   NUEVOMZONA, ID_MZONA, COD_MZONA, MEGAZONA, FECHA
+	--)
+	--SELECT 
+	--	t.NUEVOZONA, t.ID_ZONA, t.COD_ZONA, t.ZONA, t.NUEVOCAMARONERA, t.ID_CAMARONERA, 
+	--	t.COD_CAMARONERA, t.CAMARONERA, t.ID_SECTOR, t.COD_SECTOR, t.SECTOR, t.CAMBIO, 
+	--	t.NUEVOMZONA, t.ID_MZONA, t.COD_MZONA, t.MEGAZONA, GETDATE()
+	--FROM 
+	--	#TMP_AJUSTE_MASIVO t
+	----WHERE 
+	----	NOT EXISTS (
+	----		SELECT 1 
+	----		FROM parMegaUbicaciones p WITH(NOLOCK)
+	----		WHERE p.ID_ZONA = t.ID_ZONA 
+	----		  AND p.ID_CAMARONERA = t.ID_CAMARONERA
+	----		  AND p.ID_SECTOR = t.ID_SECTOR
+	----		  AND p.ID_MZONA = t.ID_MZONA
+	----	);
 		
 	SELECT * FROM #TMP_AJUSTE_MASIVO
 	IF NOT OBJECT_ID('tempdb..#TMP_AJUSTE_MASIVO') IS NULL  DROP TABLE #TMP_AJUSTE_MASIVO
-	SELECT * FROM parMegaUbicaciones WITH(NOLOCK)
-	
-	  		 select * from parMegaZona WITH(NOLOCK) where activo=1
-				 select * from parZona WITH(NOLOCK)  where activo=1  order by nombre
-				 select * from parCamaronera WITH(NOLOCK)  where activo=1 order by idZona--
-				 select * from parSector  WITH(NOLOCK) where activo=1
+	--SELECT * FROM parMegaUbicaciones WITH(NOLOCK)
+
 	rollback tran
 END TRY 
 BEGIN CATCH 
