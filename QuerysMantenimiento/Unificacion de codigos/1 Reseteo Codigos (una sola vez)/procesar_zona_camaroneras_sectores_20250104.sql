@@ -1,4 +1,4 @@
-USE IPSPCamaroneraProduccion_Test
+USE IPSPCamaroneraProduccionOswaldito
 GO
 
 IF NOT OBJECT_ID('tempdb..#TMP_AJUSTE_MASIVO') IS NULL  DROP TABLE #TMP_AJUSTE_MASIVO
@@ -214,8 +214,8 @@ begin tran
 			ON S.idSector     = MP.idSector
 		   AND S.idCamaronera = MP.idCamaronera
 
-		   select * from parCamaronera
-		   select * from parSector
+		   --select * from parCamaronera
+		   --select * from parSector
 ------FIN------------
 
 		UPDATE x 
@@ -247,7 +247,7 @@ begin tran
 		FROM  #TMP_AJUSTE_MASIVO x	     
 		INNER JOIN 	 parSector y WITH(NOLOCK) ON
 		y.nombre=x.SECTOR 
-
+		where y.activo = 1 
 
 	-----megazona
 	IF NOT EXISTS(SELECT * FROM parMegaZona WITH(NOLOCK) WHERE nombre IN(SELECT MEGAZONA FROM #TMP_AJUSTE_MASIVO WHERE NUEVOMZONA=1))
@@ -505,7 +505,7 @@ begin tran
 		      x.ID_SECTOR=y.idSector
 		  FROM #TMP_AJUSTE_MASIVO x
 		  inner join parSector y WITH(NOLOCK) ON  x.SECTOR=y.nombre 
-
+		  where y.activo = 1;
 
 
 		  UPDATE x 
@@ -583,6 +583,8 @@ begin tran
 	IF NOT OBJECT_ID('tempdb..#TMP_AJUSTE_MASIVO') IS NULL  DROP TABLE #TMP_AJUSTE_MASIVO
 	SELECT * FROM parMegaUbicaciones WITH(NOLOCK)
 	order by SECTOR
+
+	--SELECT * FROM parSector where activo=1
 	rollback tran
 END TRY 
 BEGIN CATCH 
@@ -590,3 +592,4 @@ BEGIN CATCH
 		rollback tran
 END CATCH 
 GO
+ 
