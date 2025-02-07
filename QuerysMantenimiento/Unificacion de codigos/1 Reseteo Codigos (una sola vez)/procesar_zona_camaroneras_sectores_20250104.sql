@@ -326,10 +326,10 @@ begin tran
 		  ,ID_MZONA
 		  ,1
 		  ,FORMAT(@idZona + ROW_NUMBER() OVER (ORDER BY ZONA), '00')
-		  ,FORMAT(@idZona + ROW_NUMBER() OVER (ORDER BY ZONA), '00')
+		  ,FORMAT(@idZona + ROW_NUMBER() OVER (ORDER BY ZONA), '000')
 		  ,ZONA
 		  ,ZONA
-		  ,''
+		  ,ZONA
 		  ,''
 		  ,''
 		  ,1
@@ -339,7 +339,7 @@ begin tran
 		  ,GETDATE()
 		  ,'adminPsCam'
 		  ,''
-		  ,0
+		  ,1
 		  ,0
 		  FROM #TMP_AJUSTE_MASIVO
 		  WHERE NUEVOZONA=1
@@ -368,10 +368,10 @@ begin tran
 
 
 		UPDATE x 
-		  SET x.idMegaZona = (SELECT distinct ID_MZONA  FROM #TMP_AJUSTE_MASIVO tam WHERE tam.ZONA =x.nombre AND NUEVOZONA=1),
+		  SET x.idMegaZona =  tam.ID_MZONA,
 		      x.fechaHoraModificacion=GETDATE(),
 			  x.usuarioModificacion='adminPsCam'
-		  FROM  parZona x WITH(NOLOCK)
+		  FROM  parZona x WITH(NOLOCK)  inner join #TMP_AJUSTE_MASIVO tam on  tam.ZONA =x.nombre AND NUEVOZONA=1
 
 		  UPDATE x 
 		  SET x.activo= 0,
