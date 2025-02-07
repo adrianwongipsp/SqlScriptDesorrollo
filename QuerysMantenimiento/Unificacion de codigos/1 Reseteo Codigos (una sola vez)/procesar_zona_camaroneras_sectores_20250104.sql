@@ -1,4 +1,4 @@
-USE IPSPCamaroneraProduccion_Test
+USE IPSPCamaroneraProduccionOswaldito
 GO
 
 IF NOT OBJECT_ID('tempdb..#TMP_AJUSTE_MASIVO') IS NULL  DROP TABLE #TMP_AJUSTE_MASIVO
@@ -163,6 +163,12 @@ begin tran
 		z.nombre=x.ZONA-- where z.activo = 1
 
 
+			 select 'update camaronera', x.ID_CAMARONERA,c.idCamaronera
+		,x.COD_CAMARONERA,c.codigo 
+		,c.nombre,x.CAMARONERA 
+		FROM  #TMP_AJUSTE_MASIVO x
+		inner join parCamaronera c WITH(NOLOCK) ON
+		c.nombre=x.CAMARONERA -- where c.activo = 1 
 
 		UPDATE x 
 		set x.ID_CAMARONERA=c.idCamaronera
@@ -171,7 +177,8 @@ begin tran
 		FROM  #TMP_AJUSTE_MASIVO x
 		inner join parCamaronera c WITH(NOLOCK) ON
 		c.nombre=x.CAMARONERA -- where c.activo = 1
-		
+		 
+
 		UPDATE x 
 		set x.ID_SECTOR=s.idSector
 		,x.COD_SECTOR=s.codigo 
@@ -363,6 +370,7 @@ begin tran
 		  END
 
 	END
+ 
 
 	      UPDATE x 
 		  SET x.COD_CAMARONERA= y.codigo,
@@ -370,16 +378,17 @@ begin tran
 		  FROM #TMP_AJUSTE_MASIVO x
 		  INNER JOIN parCamaronera y WITH(NOLOCK) ON x.CAMARONERA=y.nombre 
 		  --WHERE  y.activo=1
-
+		   
 		 UPDATE x 
-		  SET x.idZona= (select distinct ID_ZONA from #TMP_AJUSTE_MASIVO where  CAMARONERA=x.nombre ),
+		  SET x.idZona =  Y.ID_ZONA,
 		      x.fechaHoraModificacion=GETDATE(),
 			  x.usuarioModificacion='adminPsCam'
 		  FROM  parCamaronera x WITH(NOLOCK)
+		  inner join #TMP_AJUSTE_MASIVO y on y.CAMARONERA = x.nombre
 
 	SELECT ' finally #TMP_AJUSTE_MASIVO' AS TABLA,* FROM #TMP_AJUSTE_MASIVO
-	--select '--Camaronera',* from parCamaronera WITH(NOLOCK) where nombre ='KOREA'
-	--select '--zona',* from parZona WITH(NOLOCK) where  nombre ='KOREA'
+	select '--Camaronera',* from parCamaronera WITH(NOLOCK) where nombre ='KOREA'
+	select '--zona',* from parZona WITH(NOLOCK) where  nombre ='KOREA'
 
 		  UPDATE x 
 		  SET x.activo= 0,
@@ -447,13 +456,13 @@ begin tran
 
 
 		  UPDATE x 
-		  SET x.idCamaronera= (select distinct ID_CAMARONERA from #TMP_AJUSTE_MASIVO where  SECTOR=x.nombre ),
+		  SET x.idCamaronera=  Y.ID_CAMARONERA,
 		      x.fechaHoraModificacion=GETDATE(),
 			  x.usuarioModificacion='adminPsCam'
 		  FROM  parSector x WITH(NOLOCK)
-	
-
-
+		  inner join #TMP_AJUSTE_MASIVO y on x.nombre = y.SECTOR
+		 WHERE y.CAMBIO IN(1,2)
+	 
 		  UPDATE x 
 		  SET x.activo= 0,
 		      x.fechaHoraModificacion=GETDATE(),
