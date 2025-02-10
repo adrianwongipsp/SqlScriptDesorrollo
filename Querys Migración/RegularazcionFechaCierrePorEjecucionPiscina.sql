@@ -5,13 +5,13 @@
 ---INICIO DE PROCESO
 --fechaCierre variacion 1 dias
 declare @diferenciaDia INT
-set		@diferenciaDia	= -4;
+set		@diferenciaDia	= -1;
 declare @keyPiscina VARCHAR(25)
-set		@keyPiscina	 = 'LOSANGELES15'
+set		@keyPiscina	 = 'LOSANGELESPC2'
 declare @ciclo		VARCHAR(25)
-set		@ciclo		= 3
+set		@ciclo		= 6
 declare @isRollBack INT
-set     @isRollBack = 1---!!!! 1 ACTIVADO ROLLBACK   TRATA DE ESTE EN UNO PARA NO HACER LA CASITA
+set     @isRollBack = 0---!!!! 1 ACTIVADO ROLLBACK   TRATA DE ESTE EN UNO PARA NO HACER LA CASITA
 
 BEGIN TRAN
 
@@ -20,6 +20,7 @@ select * from EjecucionesPiscinaView where KEYPiscina=@keyPiscina AND Ciclo >= @
 	DECLARE @FECHAFINCIERRE DATE
 	DECLARE @IDPISCINA INT, @IDPISCINAEJECUCION INT, @IDPISCINAEJECUCIONSIGUIENTE INT;
 	DECLARE @IDPISCINACOSECHA INT;
+	DECLARE @IDTRANSAFERENCIA INT;
 
 	SELECT TOP 1 @FECHAFINCIERRE     = FechaCierre,   
 				 @IDPISCINA          = idPiscina, 
@@ -37,18 +38,41 @@ select * from EjecucionesPiscinaView where KEYPiscina=@keyPiscina AND Ciclo >= @
 		   liquidado	      =  1
 		    
      
-	UPDATE EjecucionesPiscinaView SET FechaCierre = DATEADD(day, + @diferenciaDia, @FECHAFINCIERRE)  WHERE KEYPiscina=@keyPiscina AND Ciclo =@ciclo
+	SELECT  TOP 1 @IDTRANSAFERENCIA = idTransferencia
+			FROM proTransferenciaEspecie
+			WHERE 
+				idPiscina = @IDPISCINA
+				AND idPiscinaEjecucion = @IDPISCINAEJECUCION
+				AND esTotal = 1
+				AND fechaTransferencia = (
+					SELECT MAX(fechaTransferencia)
+					FROM proTransferenciaEspecie
+					WHERE 
+						idPiscina = @IDPISCINA
+						AND idPiscinaEjecucion = @IDPISCINAEJECUCION
+						AND esTotal = 1
+				);
 
+	UPDATE EjecucionesPiscinaView SET FechaCierre = DATEADD(day, + @diferenciaDia, @FECHAFINCIERRE)  WHERE KEYPiscina=@keyPiscina AND Ciclo =@ciclo
+	select @IDPISCINACOSECHA as  IDPISCINACOSECHA
+	print 'update cosecha'
 	UPDATE proPiscinaCosecha    SET   fechaInicio       = DATEADD(day, + @diferenciaDia, @FECHAFINCIERRE), 
 									  fechaFin          = DATEADD(day, + @diferenciaDia, @FECHAFINCIERRE),
 									  fechaLiquidacion  = DATEADD(day, + @diferenciaDia, @FECHAFINCIERRE)
 								 WHERE idPiscinaCosecha = @IDPISCINACOSECHA
-	 
+	 print 'reset fecha cierre'
 		SELECT TOP 1 @FECHAFINCIERRE     = DATEADD(day,+ 1, FechaCierre)      
 		    FROM EjecucionesPiscinaView  with(nolock)
 		   WHERE keyPiscina = @keyPiscina AND Ciclo =@ciclo
  
- 
+	 SELECT @IDTRANSAFERENCIA AS  IDTRANSAFERENCIA
+     print 'update cosecha'
+	 UPDATE proTransferenciaEspecie    SET   fechaTransferencia       = DATEADD(day, + @diferenciaDia, @FECHAFINCIERRE)   
+								 WHERE idTransferencia = @IDTRANSAFERENCIA AND 	idPiscina = @IDPISCINA
+						         AND idPiscinaEjecucion = @IDPISCINAEJECUCION AND fechaTransferencia != DATEADD(day, + @diferenciaDia, @FECHAFINCIERRE)  
+
+     SELECT * FROM proTransferenciaEspecie WHERE idTransferencia = @IDTRANSAFERENCIA
+
 	IF(@IDPISCINAEJECUCIONSIGUIENTE > 0)
 	BEGIN  
 		UPDATE proPiscinaEjecucion SET fechaInicio = @FECHAFINCIERRE  WHERE idPiscinaEjecucion = @IDPISCINAEJECUCIONSIGUIENTE
