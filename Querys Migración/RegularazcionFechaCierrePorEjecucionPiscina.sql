@@ -1,13 +1,13 @@
 
---exec viewProcessCiclos 'CHURUTE29', 1
+--exec viewProcessCiclos 'CHURUTE30', 1
 
 
 ---INICIO DE PROCESO
 --fechaCierre variacion 1 dias
 declare @diferenciaDia INT
-set		@diferenciaDia	= +1;
+set		@diferenciaDia	= -4;
 declare @keyPiscina VARCHAR(25)
-set		@keyPiscina	 = 'LOSANGELES13'
+set		@keyPiscina	 = 'LOSANGELES15'
 declare @ciclo		VARCHAR(25)
 set		@ciclo		= 3
 declare @isRollBack INT
@@ -43,12 +43,11 @@ select * from EjecucionesPiscinaView where KEYPiscina=@keyPiscina AND Ciclo >= @
 									  fechaFin          = DATEADD(day, + @diferenciaDia, @FECHAFINCIERRE),
 									  fechaLiquidacion  = DATEADD(day, + @diferenciaDia, @FECHAFINCIERRE)
 								 WHERE idPiscinaCosecha = @IDPISCINACOSECHA
-	IF(@diferenciaDia >= 1)
-	BEGIN
+	 
 		SELECT TOP 1 @FECHAFINCIERRE     = DATEADD(day,+ 1, FechaCierre)      
-		    FROM EjecucionesPiscinaView  
+		    FROM EjecucionesPiscinaView  with(nolock)
 		   WHERE keyPiscina = @keyPiscina AND Ciclo =@ciclo
-	END 
+ 
  
 	IF(@IDPISCINAEJECUCIONSIGUIENTE > 0)
 	BEGIN  
