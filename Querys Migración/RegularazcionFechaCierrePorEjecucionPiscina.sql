@@ -5,11 +5,11 @@
 ---INICIO DE PROCESO
 --fechaCierre variacion 1 dias
 declare @diferenciaDia INT
-set		@diferenciaDia	= 2;
+set		@diferenciaDia	= +1;
 declare @keyPiscina VARCHAR(25)
-set		@keyPiscina	 = 'CHURUTE29'
+set		@keyPiscina	 = 'LOSANGELES13'
 declare @ciclo		VARCHAR(25)
-set		@ciclo		= 27
+set		@ciclo		= 3
 declare @isRollBack INT
 set     @isRollBack = 1---!!!! 1 ACTIVADO ROLLBACK   TRATA DE ESTE EN UNO PARA NO HACER LA CASITA
 
@@ -37,13 +37,13 @@ select * from EjecucionesPiscinaView where KEYPiscina=@keyPiscina AND Ciclo >= @
 		   liquidado	      =  1
 		    
      
-	UPDATE EjecucionesPiscinaView SET FechaCierre = DATEADD(day, - @diferenciaDia, @FECHAFINCIERRE)  WHERE KEYPiscina=@keyPiscina AND Ciclo =@ciclo
+	UPDATE EjecucionesPiscinaView SET FechaCierre = DATEADD(day, + @diferenciaDia, @FECHAFINCIERRE)  WHERE KEYPiscina=@keyPiscina AND Ciclo =@ciclo
 
-	UPDATE proPiscinaCosecha    SET   fechaInicio       = DATEADD(day,- @diferenciaDia, @FECHAFINCIERRE), 
-									  fechaFin          = DATEADD(day, - @diferenciaDia, @FECHAFINCIERRE),
-									  fechaLiquidacion  = DATEADD(day, - @diferenciaDia, @FECHAFINCIERRE)
+	UPDATE proPiscinaCosecha    SET   fechaInicio       = DATEADD(day, + @diferenciaDia, @FECHAFINCIERRE), 
+									  fechaFin          = DATEADD(day, + @diferenciaDia, @FECHAFINCIERRE),
+									  fechaLiquidacion  = DATEADD(day, + @diferenciaDia, @FECHAFINCIERRE)
 								 WHERE idPiscinaCosecha = @IDPISCINACOSECHA
-	IF(@diferenciaDia > 1)
+	IF(@diferenciaDia >= 1)
 	BEGIN
 		SELECT TOP 1 @FECHAFINCIERRE     = DATEADD(day,+ 1, FechaCierre)      
 		    FROM EjecucionesPiscinaView  
@@ -53,7 +53,7 @@ select * from EjecucionesPiscinaView where KEYPiscina=@keyPiscina AND Ciclo >= @
 	IF(@IDPISCINAEJECUCIONSIGUIENTE > 0)
 	BEGIN  
 		UPDATE proPiscinaEjecucion SET fechaInicio = @FECHAFINCIERRE  WHERE idPiscinaEjecucion = @IDPISCINAEJECUCIONSIGUIENTE
-	    UPDATE maePiscinaCiclo     SET fecha      = @FECHAFINCIERRE   WHERE idOrigen           = @IDPISCINAEJECUCIONSIGUIENTE 
+	    UPDATE maePiscinaCiclo     SET fecha       = @FECHAFINCIERRE   WHERE idOrigen           = @IDPISCINAEJECUCIONSIGUIENTE 
 	END 
 
 	select * from EjecucionesPiscinaView where KEYPiscina=@keyPiscina AND Ciclo >= @ciclo
