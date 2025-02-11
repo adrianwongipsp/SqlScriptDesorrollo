@@ -1,5 +1,5 @@
 DECLARE @PISCINA VARCHAR(40);
-SET @PISCINA='COSTARICAII5'
+SET @PISCINA='HONDURASALTO4'
 declare @isRollBack INT
 set     @isRollBack = 1---!!!! 1 ACTIVADO ROLLBACK   TRATA DE ESTE EN UNO PARA NO HACER LA CASITA
 --exec viewProcessCiclos @PISCINA,1
@@ -56,16 +56,19 @@ begin tran
 	IF(@cicloArranqueNuevo> 1)
 	BEGIN
 		UPDATE maeSecuencial SET ultimaSecuencia = ultimaSecuencia +1 WHERE tabla='PiscinaCiclo'
-		DECLARE @ultimaSecuencia INT
-		SELECT @ultimaSecuencia =  ultimaSecuencia  FROM maeSecuencial WITH(NOLOCK) WHERE tabla='PiscinaCiclo' 
-
-		INSERT INTO maePiscinaCiclo VALUES (@ultimaSecuencia,@idPiscina, @cicloArranqueNuevo -1, @fechaInicio,'MAN', 999, NULL, NULL, 1,
-									'adminPsCam',':::1', GETDATE(),'adminPsCam',':::1', GETDATE())
+		IF NOT EXISTS(select * from maePiscinaCiclo where idPiscina=@idPiscina AND origen='MAN' AND idOrigen=999)
+		BEGIN
+			DECLARE @ultimaSecuencia INT
+			SELECT @ultimaSecuencia =  ultimaSecuencia  FROM maeSecuencial WITH(NOLOCK) WHERE tabla='PiscinaCiclo' 
+			INSERT INTO maePiscinaCiclo VALUES (@ultimaSecuencia,@idPiscina, @cicloArranqueNuevo -1, @fechaInicio,'MAN', 999, NULL, NULL, 1,
+										'adminPsCam',':::1', GETDATE(),'adminPsCam',':::1', GETDATE())
+		END
 	END 
 
 	SELECT 'CICLO POSTERIOR', * FROM maePiscinaCiclo WHERE idPiscina in (select tc.idPiscina from #temporalCicloInicial tc)
 	select 'Despues'
 	exec viewProcessCiclos @PISCINA,1
+	SELECT * FROM maePiscinaCiclo WHERE idPiscina in (select tc.idPiscina from #temporalCicloInicial tc)
 	if(@isRollBack = 1)
 	begin 
 		ROLLBACK TRAN 
