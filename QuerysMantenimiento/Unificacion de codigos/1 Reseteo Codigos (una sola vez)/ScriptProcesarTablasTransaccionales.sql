@@ -1,5 +1,5 @@
 
-USE IPSPCamaroneraProduccion_Test
+USE IPSPCamaroneraTesting
 GO
  ------------------------------------------INVENTARIO-------------------------------------------------------------
 		 ----TABLA: BODEGAS
@@ -135,10 +135,13 @@ GO
 		    AND   R.camaronera = MP.COD_CAMARONERA_OLD
 		    AND   R.sector     = MP.COD_SECTOR_OLD 
 
-		  		----TABLA: HORARIO
+		  		 
+----TABLA: HORARIO
 		IF NOT OBJECT_ID('tempdb..#tem_Horarios') IS NULL  DROP TABLE #tem_Horarios;
 		
+		 
         SELECT DISTINCT
+			Z.nombre AS NombreZonaOld,
 			R.idZona AS id_Zona_Horario,
 			Z.idZona AS id_Zona_Old,
 			MP.ID_ZONA,
@@ -153,15 +156,15 @@ GO
 			valorMes,
 			valorDiaMes,
 			horaFinDia
-			into #tem_Horarios
+		 	into #tem_Horarios
 		FROM		
 			parMegaUbicaciones MP 
 			INNER JOIN parZona Z 
 		ON MP.COD_ZONA_OLD=Z.codigo
 			INNER JOIN parHorario R
 		ON  Z.idZona=R.idZona
-
-
+	    WHERE MP.COD_ZONA <>  Z.codigo
+		 
 
 		DECLARE @ids INT 
 		DECLARE @idMaxs INT 
@@ -195,7 +198,14 @@ GO
 		  ,''
 		  FROM #tem_Horarios
 		  WHERE NOT EXISTS (SELECT * FROM parHorario x WITH(NOLOCK) WHERE x.idZona= id_Zona AND activo=1)
-		  GROUP BY Zona
+		  GROUP BY Zona, ID_ZONA, tipo 
+		  ,horaInicio
+		  ,horaFin
+		  ,valorDiasPrevio
+		  ,valorDiasSemana
+		  ,valorMes
+		  ,valorDiaMes
+		  ,horaFinDia
 
 		  
 		  UPDATE x 
@@ -203,8 +213,9 @@ GO
 		      x.fechaHoraModificacion=GETDATE(),
 			  x.usuarioModificacion='adminPsCam'
 		  FROM  parHorario x WITH(NOLOCK)
-		  LEFT JOIN #tem_Horarios tam ON x.idZona = tam.id_Zona_Horario
+		  INNER JOIN #tem_Horarios tam ON x.idZona = tam.id_Zona_Horario
 		  WHERE x.activo = 1;
+		   
 
 		  ----TABLA: maeTablaEquivalenciaLongitudPeso---
 		  UPDATE x 
@@ -212,8 +223,8 @@ GO
 		      x.fechaHoraModificacion=GETDATE(),
 			  x.usuarioModificacion='adminPsCam'
 		  FROM  maeTablaEquivalenciaLongitudPeso x WITH(NOLOCK)
-		  LEFT JOIN #tem_Horarios tam ON x.zona = tam.COD_ZONA_OLD
+		  INNER JOIN #tem_Horarios tam ON x.zona = tam.COD_ZONA_OLD
 
 
-		 DROP TABLE #tem_Horarios
-		 DROP TABLE parMegaUbicaciones
+		 drop table parMegaUbicaciones
+		 DROP TABLE #tem_Horarios 
