@@ -1,4 +1,6 @@
 
+USE IPSPCamaroneraProduccion_Test
+GO
  ------------------------------------------INVENTARIO-------------------------------------------------------------
 		 ----TABLA: BODEGAS
 		 UPDATE B SET  
@@ -123,13 +125,95 @@
 			
 		----TABLA: DARBOT CHAT
 		UPDATE R SET  
-			 R.zona = mp.COD_ZONA,
+			 R.zona       = mp.COD_ZONA,
 			 R.camaronera = mp.COD_CAMARONERA,
-			 R.sector = mp.COD_SECTOR  
+			 R.sector     = mp.COD_SECTOR  
 		FROM		
-			parMegaUbicaciones MP INNER JOIN parGrupoWhatsappDetalle R
-		 ON     R.ZONA       = MP.COD_ZONA_OLD
-		  AND   R.camaronera = MP.COD_CAMARONERA_OLD
-		  AND   R.sector     = MP.COD_SECTOR_OLD 
+			parMegaUbicaciones MP 
+			INNER JOIN parGrupoWhatsappDetalle R
+		    ON    R.ZONA       = MP.COD_ZONA_OLD
+		    AND   R.camaronera = MP.COD_CAMARONERA_OLD
+		    AND   R.sector     = MP.COD_SECTOR_OLD 
 
-		  DROP TABLE parMegaUbicaciones
+		  		----TABLA: HORARIO
+		IF NOT OBJECT_ID('tempdb..#tem_Horarios') IS NULL  DROP TABLE #tem_Horarios;
+		
+        SELECT DISTINCT
+			R.idZona AS id_Zona_Horario,
+			Z.idZona AS id_Zona_Old,
+			MP.ID_ZONA,
+			MP.COD_ZONA,
+			MP.COD_ZONA_OLD,
+			MP.ZONA,
+			tipo, 
+			horaInicio,
+			horaFin,
+			valorDiasPrevio,
+			valorDiasSemana,
+			valorMes,
+			valorDiaMes,
+			horaFinDia
+			into #tem_Horarios
+		FROM		
+			parMegaUbicaciones MP 
+			INNER JOIN parZona Z 
+		ON MP.COD_ZONA_OLD=Z.codigo
+			INNER JOIN parHorario R
+		ON  Z.idZona=R.idZona
+
+
+
+		DECLARE @ids INT 
+		DECLARE @idMaxs INT 
+		SET @ids = 0
+		IF EXISTS(SELECT  TOP 1 1 FROM parSecuencial WITH(NOLOCK) WHERE tabla='Horario')
+		BEGIN
+		SELECT TOP 1 @ids = ultimaSecuencia
+			FROM parSecuencial WITH(NOLOCK) WHERE tabla='Horario'
+		END 
+
+		  INSERT INTO parHorario(idHorario, codigo, nombre, idZona, tipo, horaInicio, horaFin, valorDiasPrevio, valorDiasSemana, valorMes, valorDiaMes, horaFinDia, activo, fechaHoraCreacion, usuarioCreacion, estacionCreacion, fechaHoraModificacion, usuarioModificacion, estacionModificacion)
+		  SELECT DISTINCT
+		   @ids + ROW_NUMBER() OVER (ORDER BY Zona)
+		  ,FORMAT(@ids + ROW_NUMBER() OVER (ORDER BY Zona), '000')
+		  ,ZONA
+		  ,ID_ZONA
+		  ,tipo 
+		  ,horaInicio
+		  ,horaFin
+		  ,valorDiasPrevio
+		  ,valorDiasSemana
+		  ,valorMes
+		  ,valorDiaMes
+		  ,horaFinDia
+		  ,1
+		  ,GETDATE()
+		  ,'adminPsCam'
+		  ,''
+		  ,GETDATE()
+		  ,'adminPsCam'
+		  ,''
+		  FROM #tem_Horarios
+		  WHERE NOT EXISTS (SELECT * FROM parHorario x WITH(NOLOCK) WHERE x.idZona= id_Zona AND activo=1)
+		  GROUP BY Zona
+
+		  
+		  UPDATE x 
+		  SET x.activo= 0,
+		      x.fechaHoraModificacion=GETDATE(),
+			  x.usuarioModificacion='adminPsCam'
+		  FROM  parHorario x WITH(NOLOCK)
+		  LEFT JOIN #tem_Horarios tam ON x.idZona = tam.id_Zona_Horario
+		  WHERE x.activo = 1;
+
+		  ----TABLA: maeTablaEquivalenciaLongitudPeso---
+		  UPDATE x 
+		  SET x.zona= tam.COD_ZONA,
+		      x.fechaHoraModificacion=GETDATE(),
+			  x.usuarioModificacion='adminPsCam'
+		  FROM  maeTablaEquivalenciaLongitudPeso x WITH(NOLOCK)
+		  LEFT JOIN #tem_Horarios tam ON x.zona = tam.COD_ZONA_OLD
+
+
+		 DROP TABLE #tem_Horarios
+		 DROP TABLE parMegaUbicaciones
