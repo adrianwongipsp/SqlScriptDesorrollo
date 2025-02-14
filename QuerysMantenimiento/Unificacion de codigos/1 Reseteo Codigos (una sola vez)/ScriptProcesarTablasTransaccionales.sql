@@ -1,6 +1,8 @@
 
 USE IPSPCamaroneraTesting
 GO
+
+begin tran
  ------------------------------------------INVENTARIO-------------------------------------------------------------
 		 ----TABLA: BODEGAS
 		 UPDATE B SET  
@@ -64,7 +66,7 @@ GO
 			pmm.zona        = mp.COD_ZONA,
 			pmm.camaronera  = mp.COD_CAMARONERA,
 			pmm.sector      = mp.COD_SECTOR
-		 FROM  proMapperMallas pmm inner join parMegaUbicaciones MP on pmm.sectorKey = mp.nombreSectorOld
+		 FROM  proMapperMallas pmm inner join parMegaUbicaciones MP on pmm.sectorKey = mp.SECTOR
  
 		----TABLA: PARAMETROCONTROLDETALLE
 		UPDATE PCD SET 
@@ -228,3 +230,8 @@ GO
 
 		 drop table parMegaUbicaciones
 		 DROP TABLE #tem_Horarios 
+
+		 select  codigoZona, nombreZona, codigoCamaronera	, nombreCamaronera,	codigoSector	,nombreSector, count(idPiscina) as cantidadPiscina
+from PiscinaUbicacion 
+group by  codigoZona, nombreZona, codigoCamaronera	, nombreCamaronera,	codigoSector	,nombreSector
+		 rollback tran
