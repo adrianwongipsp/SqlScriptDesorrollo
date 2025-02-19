@@ -1,0 +1,1 @@
+alter table [parZona] add [idMegaZona] [int] NULL

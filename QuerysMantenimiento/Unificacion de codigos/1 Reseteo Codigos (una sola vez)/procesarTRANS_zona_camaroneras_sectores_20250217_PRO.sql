@@ -1,5 +1,5 @@
 
-USE IPSPCamaroneraProduccion
+USE IPSPCamaroneraPre
 GO
 
 begin tran
@@ -246,7 +246,7 @@ begin tran
 			FROM maeSecuencial WITH(NOLOCK) WHERE tabla='TablaEquivalenciaLongitudPeso'
 		END 
 
-
+	    INSERT INTO maeTablaEquivalenciaLongitudPeso
 		 SELECT 
 		 @ids1 + ROW_NUMBER() OVER (ORDER BY z.codigo) idTablaEquivalenciaLongitudPeso,  
 		'01' as empresa	, '01' as division, z.codigo as zona, 
@@ -274,4 +274,8 @@ begin tran
 		from PiscinaUbicacion 
 		group by  codigoZona, nombreZona, codigoCamaronera	, nombreCamaronera,	codigoSector	,nombreSector
 		order by nombreSector
-		 rollback tran
+
+		 select  codigoZona, nombreZona, codigoCamaronera	, nombreCamaronera,	codigoSector	,nombreSector,  nombrePiscina, idPiscina, KeyPiscina
+		from PiscinaUbicacion 
+		WHERE nombreSector='RUANDA'
+		 COMMIT tran
