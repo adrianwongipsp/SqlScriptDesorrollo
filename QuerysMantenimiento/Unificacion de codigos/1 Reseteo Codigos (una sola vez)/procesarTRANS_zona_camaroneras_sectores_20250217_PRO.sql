@@ -266,6 +266,7 @@ begin tran
 			 UPDATE maeSecuencial  SET ultimaSecuencia = @idMaxs1 WHERE tabla ='TablaEquivalenciaLongitudPeso'
 		  END
 
+		  /**********************hay que inactivar en parlote el registro de los sectores que quedaron inactivos y crear el lote nuevo con los datos del sector viejo al sector nuevo.**********************/
 
 		 DROP TABLE parMegaUbicaciones
 		 DROP TABLE #tem_Horarios 
