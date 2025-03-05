@@ -16,7 +16,7 @@ begin tran
 	WHERE T1.keyPiscina= @PISCINA
 	and
 	T1.Ciclo != T2.Ciclo 
-	order by T2.Fecha_IniSec  asc 
+	order by T2.Ciclo  asc 
 	
 	select 'temporal', * from #temporalCicloInicial
 	if not exists (	select 1 from #temporalCicloInicial)
@@ -55,25 +55,20 @@ begin tran
 	
 	IF(@cicloArranqueNuevo> 1)
 	BEGIN
-		
-		IF NOT EXISTS(select * from maePiscinaCiclo where idPiscina=@idPiscina AND origen='MAN' AND idOrigen=999 and activo = 1 AND CICLO > 0)
+		UPDATE maeSecuencial SET ultimaSecuencia = ultimaSecuencia +1 WHERE tabla='PiscinaCiclo'
+		IF NOT EXISTS(select * from maePiscinaCiclo where idPiscina=@idPiscina AND origen='MAN' AND idOrigen=999)
 		BEGIN
-			UPDATE maeSecuencial SET ultimaSecuencia = ultimaSecuencia +1 WHERE tabla='PiscinaCiclo'
 			DECLARE @ultimaSecuencia INT
 			SELECT @ultimaSecuencia =  ultimaSecuencia  FROM maeSecuencial WITH(NOLOCK) WHERE tabla='PiscinaCiclo' 
 			INSERT INTO maePiscinaCiclo VALUES (@ultimaSecuencia,@idPiscina, @cicloArranqueNuevo -1, @fechaInicio,'MAN', 999, NULL, NULL, 1,
 										'adminPsCam',':::1', GETDATE(),'adminPsCam',':::1', GETDATE())
 		END
-		ELSE
-		BEGIN
-			UPDATE maePiscinaCiclo SET CICLO = @cicloArranqueNuevo -1, usuarioModificacion = 'adminPsCam',
-								estacionModificacion=	':::1', fechaHoraModificacion = GETDATE() where idPiscina=@idPiscina AND origen='MAN' AND idOrigen=999 and activo = 1   
-		END 
 	END 
 
-	SELECT 'CICLO POSTERIOR', * FROM maePiscinaCiclo WITH(NOLOCK) WHERE idPiscina in (select tc.idPiscina from #temporalCicloInicial tc)
+	SELECT 'CICLO POSTERIOR', * FROM maePiscinaCiclo WHERE idPiscina in (select tc.idPiscina from #temporalCicloInicial tc)
 	select 'Despues'
-	exec viewProcessCiclos @PISCINA,1 
+	exec viewProcessCiclos @PISCINA,1
+	SELECT * FROM maePiscinaCiclo WHERE idPiscina in (select tc.idPiscina from #temporalCicloInicial tc)
 	if(@isRollBack = 1)
 	begin 
 		ROLLBACK TRAN 
@@ -81,8 +76,4 @@ begin tran
 	else
 	begin
 		COMMIT TRAN 
-	end 
-
-
-	--SELECT * FROM maePiscinaCiclo WHERE idPiscina= 2094 ORDER BY fecha ASC
-	--SELECT * FROM proPiscinaEjecucion WHERE idPiscina= 2094 ORDER BY fechaInicio ASC
+	end
