@@ -1,10 +1,12 @@
---CREATE PROCEDURE SP_MIGRACION_PISCINA_CONTROL
+--CREATE PROCEDURE SP_MIGRACION_PISCINA_PARAMETROS_CONTROL
 --AS
 --BEGIN
 BEGIN TRAN
 		  /*PROCESO DE PARAMETROS DE CONTROL */
           DECLARE @id INT = 0,
-		      @idZona INT = 0,
+		  @idZona CHAR(3) = '',
+   @CodCamaronera CHAR(5) = '',
+       @CodSector CHAR(5) = '',
 		       @Count INT = 0,
 		      @Count1 INT = 0,
    @Modifica varchar(75)  = 'MIGRACION_20250505_PISCINA';
@@ -17,22 +19,29 @@ BEGIN TRAN
 				  ,0 idCabActual
 				  ,0 idDetActual
 				  ,ca.zona
+				  ,ca.camaronera
+				  ,ca.sector
 				  ,mp.CODIGOZONA_NEW
+				  ,mp.CODIGOCAMARONERA_NEW
+				  ,mp.CODIGOSECTOR_NEW
 		  INTO #idsControlDetalle
 		  FROM proControlParametroDetalle de 
 		  INNER JOIN tempMigracionPiscina mp 
 		     ON de.idPiscina          = mp.IDPISCINA  
 		  INNER JOIN proControlParametro ca 
 		     ON de.idControlParametro = ca.idControlParametro
-		  WHERE (ca.zona <> mp.CODIGOZONA_NEW OR ca.sector <> mp.CODIGOSECTOR_NEW)
+		 
+		  --WHERE (ca.zona <> mp.CODIGOZONA_NEW) OR ca.sector <> mp.CODIGOSECTOR_NEW)
 
 		  SELECT DISTINCT 
 		           idControlParametro
 			      ,zona
+				  ,camaronera
+				  ,sector
 		          ,0 procesado
 		  INTO #idsControl
 		  FROM #idsControlDetalle
-		  ORDER BY idControlParametro
+
 
 		  --SELECT * FROM #idsControlDetalle
 		  --SELECT * FROM #idsControl
@@ -40,8 +49,10 @@ BEGIN TRAN
 		  WHILE EXISTS(SELECT TOP 1 1 FROM #idsControl WHERE procesado = 0)
 		  BEGIN
 				SELECT TOP 1	
-				     @id = idControlParametro,
-			     @idZona = zona
+				         @id = idControlParametro,
+			         @idZona = zona,
+			  @CodCamaronera = camaronera,
+			      @CodSector = sector
 		        FROM #idsControl 
 				WHERE procesado = 0 
 				ORDER BY idControlParametro
@@ -53,9 +64,13 @@ BEGIN TRAN
 			    SELECT @Count  =  COUNT(DISTINCT ap.idPiscina) 
 				FROM  proControlParametroDetalle ap 
 				INNER JOIN #idsControlDetalle de 
-				ON ap.idControlParametro    = de.idControlParametro
-				AND ap.idPiscina=de.idPiscina
-				WHERE ap.idControlParametro = @id
+				ON ap.idControlParametro         = de.idControlParametro
+				--AND ap.idControlParametroDetalle = de.idControlParametroDetalle
+				AND ap.idPiscina                 = de.idPiscina
+				WHERE ap.idControlParametro      = @id
+					AND de.zona                  = @idZona
+					AND de.camaronera            = @CodCamaronera
+					AND de.sector                = @CodSector
 
 				IF(@Count = @Count1)--si la transaccion es un solo detalle con una sola piscina distinta , basta con actualizar la cabecera
 				BEGIN
@@ -70,6 +85,9 @@ BEGIN TRAN
 					 AND  A.camaronera           = MP.CODIGOCAMARONERA_OLD
 					 AND  A.sector               = MP.CODIGOSECTOR_OLD
 			       WHERE  idControlParametro     = @id
+				   	AND zona                     = @idZona
+					AND camaronera               = @CodCamaronera
+					AND sector                   = @CodSector
 				END
 
 				  IF(@Count != @Count1)--si la transaccion es mas detalle , crear la cabecera con los nuevos campos , crear el detalle con el item a migrar y en el antiguo detalle los desactivamos
@@ -87,7 +105,10 @@ BEGIN TRAN
 						                                   INNER JOIN #idsControlDetalle de 
 				                                      ON ap.idControlParametro       = de.idControlParametro
 				                                         AND ap.idPiscina            = de.idPiscina
-				                                      WHERE ap.idControlParametro    = @id)
+				                                      WHERE ap.idControlParametro    = @id
+													  	AND zona                     = @idZona
+					                                    AND camaronera               = @CodCamaronera
+					                                    AND sector                   = @CodSector)
 
 						UPDATE proSecuencial 
 						SET @ultimaSecuenciaDetalle = ultimaSecuencia,
@@ -152,9 +173,10 @@ BEGIN TRAN
 					    FROM  proControlParametro A
 							      INNER JOIN #idsControlDetalle MP 
 								  ON   A.idControlParametro   = Mp.idControlParametro
-						          INNER JOIN tempMigracionPiscina d
-								  ON mp.idPiscina             = d.IDPISCINA
 						WHERE A.idControlParametro            = @id
+							     AND a.zona                   = @idZona
+					             AND a.camaronera             = @CodCamaronera
+					             AND a.sector                 = @CodSector
 						                
 
 
@@ -200,6 +222,9 @@ BEGIN TRAN
 				                   ON ap.idControlParametro    = de.idControlParametro
 				                   AND ap.idPiscina            = de.idPiscina
 				        WHERE ap.idControlParametro            = @id
+			                     AND de.zona                   = @idZona
+					             AND de.camaronera             = @CodCamaronera
+					             AND de.sector                 = @CodSector
 
 
 						   
@@ -221,6 +246,9 @@ BEGIN TRAN
 				    ON d.idControlParametro    = de.idControlParametro
 				    AND d.idPiscina            = de.idPiscina
 				    WHERE d.idControlParametro = @id
+					AND de.zona                = @idZona
+					AND de.camaronera          = @CodCamaronera
+					AND de.sector              = @CodSector
 
 					
 					UPDATE d
@@ -231,6 +259,9 @@ BEGIN TRAN
 					    d.idCabActual          = @ultimaSecuenciaCabecera
 					FROM   #idsControlDetalle d
 					WHERE d.idControlParametro = @id 
+				    AND d.zona                 = @idZona
+					AND d.camaronera           = @CodCamaronera
+					AND d.sector               = @CodSector
 
 
 
@@ -238,7 +269,10 @@ BEGIN TRAN
 						                     FROM proControlParametroValorDetalle 	ap		
 						                     INNER JOIN #idsControlDetalle de 
 				                             ON ap.idControlParametroDetalle    = de.idControlParametroDetalle
-				                             WHERE de.idControlParametro        = @id), @ultimaSecuenciaV INT=0;
+				                             WHERE de.idControlParametro        = @id
+											 AND de.zona                 = @idZona
+					                         AND de.camaronera           = @CodCamaronera
+					                         AND de.sector               = @CodSector), @ultimaSecuenciaV INT=0;
 
 					UPDATE proSecuencial 
 					SET @ultimaSecuenciaV = ultimaSecuencia,
@@ -293,3 +327,4 @@ BEGIN TRAN
 		  END
 
 ROLLBACK TRAN
+--END
