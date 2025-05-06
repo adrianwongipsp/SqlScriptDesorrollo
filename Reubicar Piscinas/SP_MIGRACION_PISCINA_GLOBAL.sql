@@ -13,8 +13,8 @@ BEGIN
         
 		EXEC SP_MIGRACION_PISCINA_PEDIDO_BINES
 
-		EXEC SP_MIGRACION_PISCINA_PLANIFICACION
-		EXEC SP_MIGRACION_PISCINA_RECEPCION
+		EXEC SP_MIGRACION_PISCINA_PLANIFICACION 1
+		EXEC SP_MIGRACION_PISCINA_RECEPCION 1
         -- otros módulos...
 		if (@aplicaRollback = 0)
 			COMMIT TRANSACTION
@@ -36,7 +36,7 @@ BEGIN
             
         -- Registrar error en log
         INSERT INTO parMigracionLog (estado, mensaje, error_info, fechaRegistro) 
-        VALUES ('ERROR', 'Error en migración', ERROR_MESSAGE())
+        VALUES ('ERROR', 'Error en migración', ERROR_MESSAGE(), GETDATE())
         
         -- Propagar el error 
 			DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
