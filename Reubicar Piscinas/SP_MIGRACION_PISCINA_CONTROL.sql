@@ -354,14 +354,17 @@ BEGIN
 
 				   END
 			
-			       UPDATE #idsControl SET procesado = 1 WHERE idControlParametro     = @id		    AND 
-															  procesado				 = 0  
+			       UPDATE #idsControl SET procesado = 1 WHERE idControlParametro  = @id		    AND 
+															  procesado			  = 0  
+														 AND zona                 = @idZona
+					                                     AND camaronera           = @CodCamaronera
+					                                     AND sector               = @CodSector
 		  END
 
-		    SELECT COUNT(*) AS CONTROLES_ANULADOS      FROM proControlParametro WITH(NOLOCK) WHERE estacionModificacion = @Modifica+'_ANU'
-			SELECT COUNT(*) AS CONTROLES_CREADOS       FROM proControlParametro WITH(NOLOCK) WHERE estacionModificacion = @Modifica+'_CRE'
-		    SELECT COUNT(*) AS CONTROLES_ACTUALIZADOS  FROM proControlParametro WITH(NOLOCK) WHERE estacionModificacion = @Modifica +'_MOD' --AND estacionCreacion <> @Modifica AND ESTADO <> 'ANU'
-			SELECT COUNT(*) AS CONTROLES_ACTUALIZADOS  FROM proControlParametro WITH(NOLOCK) WHERE estacionModificacion = @Modifica +'_MODCAB'  
+		 --   SELECT COUNT(*) AS CONTROLES_ANULADOS      FROM proControlParametro WITH(NOLOCK) WHERE estacionModificacion = @Modifica+'_ANU'
+			--SELECT COUNT(*) AS CONTROLES_CREADOS       FROM proControlParametro WITH(NOLOCK) WHERE estacionModificacion = @Modifica+'_CRE'
+		 --   SELECT COUNT(*) AS CONTROLES_ACTUALIZADOS  FROM proControlParametro WITH(NOLOCK) WHERE estacionModificacion = @Modifica +'_MOD' --AND estacionCreacion <> @Modifica AND ESTADO <> 'ANU'
+			--SELECT COUNT(*) AS CONTROLES_ACTUALIZADOS  FROM proControlParametro WITH(NOLOCK) WHERE estacionModificacion = @Modifica +'_MODCAB'  
 
 			 --SELECT * FROM proControlParametro WITH(NOLOCK) WHERE idControlParametro = 172467--220466
 			 --SELECT * FROM proControlParametroDetalle WITH(NOLOCK) WHERE idControlParametro =172467-- 220466 
