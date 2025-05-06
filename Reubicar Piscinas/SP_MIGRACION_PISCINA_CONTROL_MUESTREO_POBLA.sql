@@ -7,7 +7,7 @@ BEGIN
           DECLARE @id INT = 0,
 		       @Count INT = 0,
 		      @Count1 INT = 0,
-    @Modifica varchar(75) = 'HOLAMUNDO';
+    @Modifica varchar(75) = 'MIGRACION_20250505_ZONA';
 
 		  SELECT DISTINCT  
 		           de.idMuestreo
@@ -367,9 +367,7 @@ BEGIN
 			       UPDATE #idsControl SET procesado = 1 WHERE idMuestreo     = @id	AND 
 															  procesado	     = 0  
 
-
-
-
+ 
 		END
 ROLLBACK TRAN
 END
