@@ -1,10 +1,8 @@
 
---CREATE PROCEDURE SP_MIGRACION_PISCINA_CONTROL_MUESTREO_POBLA
---AS
---BEGIN
-BEGIN TRAN
-
-		 
+CREATE PROCEDURE SP_MIGRACION_PISCINA_CONTROL_MUESTREO_POBLACION
+AS
+BEGIN
+--BEGIN TRAN	 
 		   /*PROCESO  DE MUESTREOS DE POBLACION */
           DECLARE @id INT = 0,
 		       @Count INT = 0,
@@ -374,86 +372,6 @@ BEGIN TRAN
 
 		END
 ROLLBACK TRAN
---END
+END
 
-					--	INSERT INTO [dbo].[proMuestreoPoblacionDetalle]
-					--			   ([idMuestreoDetalle]
-					--			   ,[idMuestreo]
-					--			   ,[orden]
-					--			   ,[idPiscina]
-					--			   ,[cantidadTotal]
-					--			   ,[numeroCapturas]
-					--			   ,[areaCapturaMetros2]
-					--			   ,[areaPiscinaHectareas]
-					--			   ,[profundidadMuestreo]
-					--			   ,[areaCapturaAjustadaMetros2]
-					--			   ,[horaMuestreo]
-					--			   ,[nivelBajoAguaValor]
-					--			   ,[nivelBajoAguaUnidad]
-					--			   ,[cantidadMuertos]
-					--			   ,[cantidadMudados]
-					--			   ,[cantidadBlandos]
-					--			   ,[cantidadFlacidos]
-					--			   ,[cantidadHongos]
-					--			   ,[cantidadBacterias]
-					--			   ,[cantidadSucias]
-					--			   ,[cantidadOtros]
-					--			   ,[poblacionEstimada]
-					--			   ,[idPiscinaEjecucion]
-					--			   ,[observacion]
-					--			   ,[activo]
-					--			   ,[usuarioCreacion]
-					--			   ,[estacionCreacion]
-					--			   ,[fechaHoraCreacion]
-					--			   ,[usuarioModificacion]
-					--			   ,[estacionModificacion]
-					--			   ,[fechaHoraModificacion])
-		   --          SELECT   (ROW_NUMBER() OVER(ORDER BY ap.idMuestreoDetalle)  + @ultimaSecuenciaDetalle) 
-					--			  ,@ultimaSecuenciaCabecera
-					--			  ,orden
-					--			  ,ap.idPiscina
-					--			  ,cantidadTotal
-					--			  ,numeroCapturas
-					--			  ,areaCapturaMetros2
-					--			  ,areaPiscinaHectareas
-					--			  ,profundidadMuestreo
-					--			  ,areaCapturaAjustadaMetros2
-					--			  ,horaMuestreo
-					--			  ,nivelBajoAguaValor
-					--			  ,nivelBajoAguaUnidad
-					--			  ,cantidadMuertos
-					--			  ,cantidadMudados
-					--			  ,cantidadBlandos
-					--			  ,cantidadFlacidos
-					--			  ,cantidadHongos
-					--			  ,cantidadBacterias
-					--			  ,cantidadSucias
-					--			  ,cantidadOtros
-					--			  ,poblacionEstimada
-					--			  ,idPiscinaEjecucion
-					--			  ,observacion
-					--			  ,activo
-					--			  ,usuarioCreacion
-					--			  ,estacionCreacion
-					--			  ,fechaHoraCreacion
-					--			  ,usuarioModificacion
-					--			  ,@Modifica
-					--			  ,fechaHoraModificacion
-					--	FROM    proMuestreoPoblacionDetalle ap		
-					--	INNER JOIN #idsControlDetalle de 
-				 --                  ON ap.idMuestreo    = de.idMuestreo
-				 --                  AND ap.idPiscina    = de.idPiscina
-				 --       WHERE ap.idMuestreo            = @id
-			
-
-					             
-			
-
-					----inactivo los detalle antiguo migrado a la nueva transaccion
-					--UPDATE  d SET activo               = 0, 
-					--              estacionModificacion = @Modifica
-					--FROM  proMuestreoPoblacionDetalle d 
-					--INNER JOIN #idsControlDetalle de 
-				 --   ON d.idMuestreo    = de.idMuestreo
-				 --   AND d.idPiscina    = de.idPiscina
-				 --   WHERE d.idMuestreo = @id
+					

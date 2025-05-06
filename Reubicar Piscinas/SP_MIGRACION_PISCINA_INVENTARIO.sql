@@ -1,11 +1,11 @@
---CREATE PROCEDURE SP_MIGRACION_PISCINA_INVENTARIO
---AS
- 
+CREATE PROCEDURE SP_MIGRACION_PISCINA_INVENTARIO
+AS
+BEGIN
 
-        DECLARE @Modifica VARCHAR(75)   = 'HOLAMUNDO'       
-		        ,@ContarDetalle	    INT = 0
-				,@Count             INT = 0;
- BEGIN TRY
+DECLARE @Modifica VARCHAR(75)   = 'HOLAMUNDO'       
+		,@ContarDetalle	    INT = 0
+		,@Count             INT = 0;
+ --BEGIN TRAN
 		 ----Maestro: BODEGAS 
 		  UPDATE B SET
 				B.zona                 = MP.CODIGOZONA_NEW,
@@ -614,4 +614,5 @@
 					      procesado		              = 0  
 		  END
 		
-ROLLBACK TRAN
+--ROLLBACK TRAN
+END

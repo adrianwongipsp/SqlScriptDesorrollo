@@ -1,7 +1,7 @@
-USE [IPSPCamaroneraPre]
-GO
-
-BEGIN TRAN
+CREATE PROCEDURE SP_MIGRACION_PISCINA_PEDIDO_BINES
+AS
+BEGIN
+--BEGIN TRAN
 		 DROP TABLE IF EXISTS #idsPedidoDetalle
 		 DROP TABLE IF EXISTS #idsPedido
 		   /*PROCESO  DE MUESTREOS DE POBLACION */
@@ -9,7 +9,7 @@ BEGIN TRAN
 		          @Count  INT = 0,
 		          @Count1 INT = 0,
 			      @idZona   VARCHAR(20)  = '',
-				  @Modifica VARCHAR(75)  = 'MIGRACION_20250429_ZONA';
+				  @Modifica VARCHAR(75)  = 'MIGRACION_20250505_ZONA';
 		
 		--Procesamiento en bloques para evitar ciclos extensos
 		CREATE TABLE #idsPedido (idPedidoBin INT, codigoZona VARCHAR(20), procesado bit);
@@ -252,9 +252,10 @@ BEGIN TRAN
 
 													  --select * from proPedidoBin where idPedidoBin = 6373
 													  --select * from proPedidoBinDetalle where idPedidoBin = 6373
-													 SELECT COUNT(*) AS PEDIDOS_ANULADOS FROM proPedidoBin WITH(NOLOCK) WHERE estacionModificacion=@Modifica+'_ANU'
-													 SELECT COUNT(*) AS PEDIDOS_CREADOS  FROM proPedidoBin WITH(NOLOCK) WHERE estacionCreacion = @Modifica
-													 SELECT COUNT(*) AS PEDIDOS_ACTUALIZADOS  FROM proPedidoBin WITH(NOLOCK) WHERE estacionModificacion = @Modifica +'_MOD' --AND estacionCreacion <> @Modifica AND ESTADO <> 'ANU'
+													-- SELECT COUNT(*) AS PEDIDOS_ANULADOS FROM proPedidoBin WITH(NOLOCK) WHERE estacionModificacion=@Modifica+'_ANU'
+													-- SELECT COUNT(*) AS PEDIDOS_CREADOS  FROM proPedidoBin WITH(NOLOCK) WHERE estacionCreacion = @Modifica
+													 --SELECT COUNT(*) AS PEDIDOS_ACTUALIZADOS  FROM proPedidoBin WITH(NOLOCK) WHERE estacionModificacion = @Modifica +'_MOD' --AND estacionCreacion <> @Modifica AND ESTADO <> 'ANU'
 													  --select * from proPedidoBinDetalle where idPedidoBin in(
 													  --select idPedidoBin from proPedidoBin where estacionModificacion=@Modifica)
-ROLLBACK TRAN
+--COMMIT TRAN
+END 

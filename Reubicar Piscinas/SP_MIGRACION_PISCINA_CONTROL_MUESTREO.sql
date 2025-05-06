@@ -1,15 +1,16 @@
 
---CREATE PROCEDURE SP_MIGRACION_PISCINA_CONTROL_MUESTREO
---AS
---BEGIN
-BEGIN TRAN
-
+CREATE PROCEDURE SP_MIGRACION_PISCINA_CONTROL_MUESTREO
+AS
+BEGIN
+--BEGIN TRAN
+		 DROP TABLE IF EXISTS #idsControlDetalle
+		 DROP TABLE IF EXISTS #idsControl
 		 
 		   /*PROCESO  DE MUESTREOS DE PESOS */
           DECLARE @id INT = 0,
 		       @Count INT = 0,
 		      @Count1 INT = 0,
-    @Modifica varchar(75) = 'HOLAMUNDO';
+    @Modifica varchar(75) = 'MIGRACION_PISCINA_20250505';
 
 		  SELECT DISTINCT  
 		           de.idMuestreo
@@ -21,17 +22,17 @@ BEGIN TRAN
 		  INTO #idsControlDetalle
 		  FROM proMuestreoPesoDetalle de 
 		  INNER JOIN tempMigracionPiscina mp 
-		  ON de.idPiscina    =  mp.IDPISCINA   
-		  ORDER BY de.idMuestreo
+		  ON de.idPiscina    =  mp.IDPISCINA 
+
 
 		  SELECT DISTINCT 
 		           idMuestreo
 		          ,0 procesado
 		  INTO #idsControl
 		  FROM #idsControlDetalle
-		  ORDER BY idMuestreo
 
-		  SELECT * FROM  #idsControl
+
+		  --SELECT * FROM  #idsControl
 		  WHILE EXISTS(SELECT TOP 1 1 FROM #idsControl WHERE procesado = 0)
 		  BEGIN
 				SELECT TOP 1	
@@ -54,9 +55,9 @@ BEGIN TRAN
 			    SELECT @Count  =  COUNT(DISTINCT ap.idPiscina) 
 				FROM  proMuestreoPesoDetalle ap 
 				INNER JOIN #idsControlDetalle de 
-				ON ap.idMuestreo=de.idMuestreo
-				AND ap.idPiscina=de.idPiscina
-				WHERE ap.idMuestreo =@id
+				ON ap.idMuestreo    = de.idMuestreo
+				AND ap.idPiscina    = de.idPiscina
+				WHERE ap.idMuestreo = @id
 
 				IF(@Count = @Count1)--si la transaccion es un solo detalle con una sola piscina distinta , basta con actualizar la cabecera
 				BEGIN
@@ -64,13 +65,13 @@ BEGIN TRAN
 						  A.zona                 = mp.CODIGOZONA_NEW,
 						  A.camaronera           = mp.CODIGOCAMARONERA_NEW,
 						  A.sector               = mp.CODIGOSECTOR_NEW, 
-				          A.estacionModificacion = @Modifica
+				          A.estacionModificacion = @Modifica+'_MOD'
 				   FROM    tempMigracionPiscina MP 
 				   INNER JOIN  proMuestreoPeso A
-				     ON   A.zona               = MP.CODIGOZONA_OLD
-					 AND  A.camaronera         = MP.CODIGOCAMARONERA_OLD
-					 AND  A.sector             = MP.CODIGOSECTOR_OLD
-			       WHERE  idMuestreo           = @id
+				     ON   A.zona                = MP.CODIGOZONA_OLD
+					 AND  A.camaronera          = MP.CODIGOCAMARONERA_OLD
+					 AND  A.sector              = MP.CODIGOSECTOR_OLD
+			       WHERE  idMuestreo            = @id
 				END
 
 				  IF(@Count != @Count1)--si la transaccion es mas detalle , crear la cabecera con los nuevos campos , crear el detalle con el item a migrar y en el antiguo detalle los desactivamos
@@ -84,9 +85,10 @@ BEGIN TRAN
 						SET @IdsNecesarios         = (SELECT COUNT(1)
 						                              FROM proMuestreoPesoDetalle 	ap		
 						                                   INNER JOIN #idsControlDetalle de 
-				                                      ON ap.idMuestreo       = de.idMuestreo
-				                                         AND ap.idPiscina    = de.idPiscina
-				                                      WHERE ap.idMuestreo    = @id)
+				                                      ON ap.idMuestreo            = de.idMuestreo
+													     AND ap.idMuestreoDetalle = de.idMuestreoDetalle
+				                                         AND ap.idPiscina         = de.idPiscina
+				                                      WHERE ap.idMuestreo         = @id)
 
 						UPDATE proSecuencial 
 						SET    @ultimaSecuenciaDetalle  = ultimaSecuencia,
@@ -94,8 +96,8 @@ BEGIN TRAN
 						WHERE  tabla = 'MuestreoPesoDetalle'
 
 
-						select @ultimaSecuenciaCabecera, @id, @IdsNecesarios
-						select @ultimaSecuenciaDetalle, @Count
+						--select @ultimaSecuenciaCabecera, @id, @IdsNecesarios
+						--select @ultimaSecuenciaDetalle, @Count
 						--crear la cabecera con los nuevos campos 
 						
 					INSERT INTO [dbo].[proMuestreoPeso]
@@ -141,16 +143,16 @@ BEGIN TRAN
 								,estacionCreacion
 								,fechaHoraCreacion
 								,usuarioModificacion
-								,@Modifica
+								,@Modifica+'_CRE'
 								,fechaHoraModificacion
 								,responsable 
 								,codigoRolPiscina
 						FROM 	proMuestreoPeso A
 							      INNER JOIN #idsControlDetalle MP 
-								  ON   A.idMuestreo=Mp.idMuestreo
+								  ON   A.idMuestreo = Mp.idMuestreo
 						          INNER JOIN tempMigracionPiscina d
-								  ON mp.idPiscina= d.IDPISCINA
-						WHERE A.idMuestreo            = @id
+								  ON mp.idPiscina   = d.IDPISCINA
+						WHERE A.idMuestreo          = @id
 
 
 							               
@@ -197,7 +199,7 @@ BEGIN TRAN
 								  ,estacionCreacion
 								  ,fechaHoraCreacion
 								  ,usuarioModificacion
-								  ,@Modifica
+								  ,@Modifica+'CRE'
 								  ,fechaHoraModificacion
 								  ,pesoPromedioReportado
 						FROM    proMuestreoPesoDetalle ap		
@@ -212,7 +214,7 @@ BEGIN TRAN
 
 					--inactivo los detalle antiguo migrado a la nueva transaccion
 					UPDATE  d SET activo               = 0, 
-					              estacionModificacion = @Modifica
+					              estacionModificacion = @Modifica+'_ANU'
 					FROM  proMuestreoPesoDetalle d 
 					INNER JOIN #idsControlDetalle de 
 				    ON d.idMuestreo    = de.idMuestreo
@@ -233,7 +235,7 @@ BEGIN TRAN
 					                   FROM  proMuestreoPesoDetalle de WITH (NOLOCK) 
 					                   WHERE de.idMuestreo = @ultimaSecuenciaCabecera 
 					                   AND de.idPiscina=d.idPiscina),
-					    d.idCabActual=@ultimaSecuenciaCabecera
+					    d.idCabActual  = @ultimaSecuenciaCabecera
 					FROM   #idsControlDetalle d
 					WHERE d.idMuestreo = @id 
 
@@ -247,8 +249,8 @@ BEGIN TRAN
                 	DECLARE @IdsLong INT = (SELECT COUNT(1)
 						                     FROM proMuestreoPesoLongitudDetalle 	ap		
 						                     INNER JOIN #idsControlDetalle de 
-				                             ON ap.idMuestreoDetalle    = de.idMuestreoDetalle
-				                             WHERE de.idMuestreo = @id), @ultimaSecuenciaL INT=0;
+				                             ON ap.idMuestreoDetalle  = de.idMuestreoDetalle
+				                             WHERE de.idMuestreo      = @id), @ultimaSecuenciaL INT=0;
 
 					UPDATE proSecuencial 
 					SET @ultimaSecuenciaL = ultimaSecuencia,
@@ -286,7 +288,7 @@ BEGIN TRAN
 								  ,estacionCreacion
 								  ,fechaHoraCreacion
 								  ,usuarioModificacion
-								  ,@Modifica
+								  ,@Modifica+'_CRE'
 								  ,fechaHoraModificacion
 						FROM    proMuestreoPesoLongitudDetalle ap		
 						INNER JOIN #idsControlDetalle de 
@@ -294,18 +296,18 @@ BEGIN TRAN
 				        WHERE de.idMuestreo        = @id
 
 					UPDATE  d SET activo               = 0, 
-					              estacionModificacion = @Modifica
+					              estacionModificacion = @Modifica+'_ANU'
 					FROM  proMuestreoPesoLongitudDetalle d 
 					INNER JOIN #idsControlDetalle de 
-				    ON d.idMuestreoDetalle    = de.idMuestreoDetalle
-				    WHERE de.idMuestreo = @id
+				    ON d.idMuestreoDetalle = de.idMuestreoDetalle
+				    WHERE de.idMuestreo    = @id
 
 
                 	DECLARE @IdsTalla INT = (SELECT COUNT(1)
 						                     FROM proMuestreoPesoTallaDetalle 	ap		
 						                     INNER JOIN #idsControlDetalle de 
-				                             ON ap.idMuestreoDetalle    = de.idMuestreoDetalle
-				                             WHERE de.idMuestreo = @id), @ultimaSecuenciaT INT=0;
+				                             ON ap.idMuestreoDetalle = de.idMuestreoDetalle
+				                             WHERE de.idMuestreo     = @id), @ultimaSecuenciaT INT=0;
 
 					UPDATE proSecuencial 
 					SET @ultimaSecuenciaT = ultimaSecuencia,
@@ -340,7 +342,7 @@ BEGIN TRAN
 								  ,estacionCreacion
 								  ,fechaHoraCreacion
 								  ,usuarioModificacion
-								  ,@Modifica
+								  ,@Modifica+'_CRE'
 								  ,fechaHoraModificacion
 						FROM    proMuestreoPesoTallaDetalle ap		
 						INNER JOIN #idsControlDetalle de 
@@ -348,18 +350,18 @@ BEGIN TRAN
 				        WHERE de.idMuestreo        = @id
 
 					UPDATE  d SET activo               = 0,
-					              estacionModificacion = @Modifica
+					              estacionModificacion = @Modifica+'_ANU'
 					FROM  proMuestreoPesoTallaDetalle d 
 					INNER JOIN #idsControlDetalle de 
 				    ON d.idMuestreoDetalle    = de.idMuestreoDetalle
-				    WHERE de.idMuestreo = @id
+				    WHERE de.idMuestreo       = @id
 
 				   END
 			
-			       UPDATE #idsControl SET procesado = 1 WHERE idMuestreo     = @id	AND 
-															  procesado	     = 0  
+			       UPDATE #idsControl SET procesado = 1 WHERE idMuestreo = @id	AND 
+															  procesado	 = 0  
 
 
 		END
-ROLLBACK TRAN
---END
+--ROLLBACK TRAN
+END
