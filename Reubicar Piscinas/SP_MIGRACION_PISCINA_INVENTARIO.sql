@@ -1,23 +1,14 @@
-CREATE PROCEDURE SP_MIGRACION_PISCINA_INVENTARIO
+ALTER PROCEDURE [dbo].[SP_MIGRACION_PISCINA_INVENTARIO]
 AS
 BEGIN
 
-DECLARE @Modifica VARCHAR(75)   = 'HOLAMUNDO'       
+DECLARE @Modifica VARCHAR(75)   = 'MIGRACION_PISCINA_20250505'       
 		,@ContarDetalle	    INT = 0
-		,@Count             INT = 0;
+		,@Count             INT = 0
+		,@idZona CHAR(3)        = ''
+        ,@CodCamaronera CHAR(5) = ''
+        ,@CodSector CHAR(5)     = ''
  --BEGIN TRAN
-		 ----Maestro: BODEGAS 
-		  UPDATE B SET
-				B.zona                 = MP.CODIGOZONA_NEW,
-				B.camaronera           = MP.CODIGOCAMARONERA_NEW,
-				B.sector               = MP.CODIGOSECTOR_NEW,
-				B.nombre               = MP.SECTOR_NEW + NOMBREPISCINA,
-				B.estacionModificacion = @Modifica
-		 FROM   tempMigracionPiscina MP INNER JOIN INVBODEGA B 
-		  ON    B.zona                 = MP.CODIGOZONA_OLD
-		  AND   B.camaronera           = MP.CODIGOCAMARONERA_OLD
-		  AND   B.sector               = MP.CODIGOSECTOR_OLD
-		  AND   B.idPiscina            = MP.IDPISCINA
 
 		--Proceso: aplicacion de item------------------------------------------------------------------------------------------------
           DECLARE @idAplicacionItem   INT=0;
@@ -29,21 +20,35 @@ DECLARE @Modifica VARCHAR(75)   = 'HOLAMUNDO'
 				  ,de.idPiscina  
 				  ,0 idCabActual
 				  ,0 idDetActual
+				  ,ca.codigoZona AS zona
+				  ,ca.codigoCamaronera AS camaronera
+				  ,ca.codigoSector  AS sector
+				  ,mp.CODIGOZONA_NEW
+				  ,mp.CODIGOCAMARONERA_NEW
+				  ,mp.CODIGOSECTOR_NEW
 		  INTO #idsDetalle
 		  FROM invAplicacionItemDetalle de 
 		  INNER JOIN tempMigracionPiscina mp 
-		  ON de.idPiscina    =  mp.IDPISCINA   
+		  ON de.idPiscina    =  mp.IDPISCINA 
+		  INNER JOIN invAplicacionItem ca 
+		  ON de.idAplicacionItem = ca.idAplicacionItem
 		  
 
 		  SELECT  DISTINCT 
-		          ap.idAplicacionItem,
-                  0 procesado
+		          ap.idAplicacionItem
+				  ,zona
+				  ,camaronera
+				  ,sector
+                  ,0 procesado
 		  INTO #idsAplicacionItem 
 		  FROM #idsDetalle ap
 
 		  WHILE EXISTS(SELECT TOP 1 1 FROM #idsAplicacionItem WHERE procesado = 0)
 		  BEGIN
-				SELECT TOP 1	@idAplicacionItem          = idAplicacionItem 
+				SELECT TOP 1	@idAplicacionItem = idAplicacionItem, 
+				                @idZona           = zona,
+			                    @CodCamaronera    = camaronera,
+			                    @CodSector        = sector
 					    FROM	#idsAplicacionItem  
 						WHERE	procesado = 0 
 						ORDER BY idAplicacionItem;
@@ -57,20 +62,33 @@ DECLARE @Modifica VARCHAR(75)   = 'HOLAMUNDO'
 				INNER JOIN #idsDetalle de 
 				ON ap.idAplicacionItem=de.idAplicacionItem
 				AND ap.idPiscina=de.idPiscina
-				WHERE ap.idAplicacionItem =@idAplicacionItem;
+				WHERE ap.idAplicacionItem = @idAplicacionItem
+				AND de.zona               = @idZona
+				AND de.camaronera         = @CodCamaronera
+				AND de.sector             = @CodSector
 
 				IF(@ContarDetalle = @Count)--si la transaccion es un solo detalle con una sola piscina distinta , basta con actualizar la cabecera
 				BEGIN
+					 print 'INGRESO'
+				  	 print 
+							 'INGRESO MOD SIMPLE'    +  
+							 + '|' + cast(@idAplicacionItem as varchar(15))    
+						     + '|' + cast(@Count as varchar(15))
+							 + '|' + cast(@ContarDetalle as varchar(15))
+
 				   UPDATE A SET    
 						  A.codigoZONA           = mp.CODIGOZONA_NEW,
 						  A.codigocamaronera     = mp.CODIGOCAMARONERA_NEW,
 						  A.codigosector         = mp.CODIGOSECTOR_NEW,
-						  a.estacionModificacion = @Modifica
-				   FROM   tempMigracionPiscina MP INNER JOIN invAplicacionItem A
-					 ON   A.codigoZona           = MP.CODIGOZONA_OLD
-					AND   A.codigocamaronera     = MP.CODIGOCAMARONERA_OLD
-					AND   A.codigosector         = MP.CODIGOSECTOR_OLD
-				   WHERE  idAplicacionItem       = @idAplicacionItem
+						  a.estacionModificacion = @Modifica+'_MODCAB'
+				   FROM    invAplicacionItem A
+				   INNER JOIN #idsDetalle mp
+				     ON   A.codigoZona          = MP.zona
+					 AND  A.codigoCamaronera    = MP.camaronera
+					 AND  A.codigoSector        = MP.sector
+					 AND A.idAplicacionItem     = MP.idAplicacionItem
+				   WHERE  A.idAplicacionItem    = @idAplicacionItem
+
 				END
 
 				  IF(@ContarDetalle != @Count)--si la transaccion es mas detalle , crear la cabecera con los nuevos campos , crear el detalle con el item a migrar y en el antiguo detalle los desactivamos
@@ -88,12 +106,22 @@ DECLARE @Modifica VARCHAR(75)   = 'HOLAMUNDO'
 													  INNER JOIN #idsDetalle de 
 													  ON ap.idAplicacionItem    = de.idAplicacionItem
 													  AND ap.idPiscina          = de.idPiscina
-													  WHERE ap.idAplicacionItem = @idAplicacionItem)
+													  WHERE ap.idAplicacionItem = @idAplicacionItem
+													  AND de.zona               = @idZona
+				                                      AND de.camaronera         = @CodCamaronera
+				                                      AND de.sector             = @CodSector)
 
 						UPDATE invSecuencial 
 						SET @ultimaSecuenciaDetalle = ultimaSecuencia,
 							ultimaSecuencia			= ultimaSecuencia + @IdsNecesarios  -- Valor arbitrario pero seguro
 						WHERE tabla                 = 'AplicacionItemDetalle'
+
+						PRINT 
+							 'APLICACION'    + cast(@ultimaSecuenciaCabecera as varchar(15))    
+							 + '|' + cast(@idAplicacionItem as varchar(15))   
+							 + '|' + cast(@ultimaSecuenciaDetalle as varchar(15))  
+						     + '|' + cast(@Count as varchar(15))
+							 + '|' + cast(@ContarDetalle as varchar(15))
 
 						--crear la cabecera con los nuevos campos 
 						INSERT INTO invAplicacionItem ( 
@@ -131,16 +159,17 @@ DECLARE @Modifica VARCHAR(75)   = 'HOLAMUNDO'
 								,usuarioCreacion
 								,estacionCreacion
 								,fechaHoraCreacion
-								,@Modifica
+								,@Modifica+'_CRE'
 								,estacionModificacion
 								,fechaHoraModificacion
 								,responsable 
 						 FROM 	invAplicacionItem A
-					     INNER JOIN #idsDetalle MP 
-					     ON   A.idAplicacionItem            = Mp.idAplicacionItem
-						 INNER JOIN tempMigracionPiscina d
-						 ON mp.idPiscina= d.IDPISCINA
-						 WHERE A.idAplicacionItem            = @idAplicacionItem
+					     INNER JOIN #idsDetalle de 
+					     ON   A.idAplicacionItem   = de.idAplicacionItem
+						 WHERE A.idAplicacionItem  = @idAplicacionItem
+						 AND de.zona               = @idZona
+				         AND de.camaronera         = @CodCamaronera
+				         AND de.sector             = @CodSector
 						
 
 					  --crear los detalles por piscina con los nuevos campos 
@@ -168,7 +197,7 @@ DECLARE @Modifica VARCHAR(75)   = 'HOLAMUNDO'
 									,fechaHoraModificacion
 									,idBodegaDestino
 									,numeroLote)
-					    SELECT     (ROW_NUMBER() OVER(ORDER BY idAplicacionItemDetalle)  + @ultimaSecuenciaDetalle) 
+					    SELECT     (ROW_NUMBER() OVER(ORDER BY ap.idAplicacionItemDetalle)  + @ultimaSecuenciaDetalle) 
 									,@ultimaSecuenciaCabecera 
 									,ap.idPiscina
 									,idPiscinaEjecucion
@@ -187,30 +216,41 @@ DECLARE @Modifica VARCHAR(75)   = 'HOLAMUNDO'
 									,estacionCreacion
 									,fechaHoraCreacion
 									,usuarioModificacion
-									,@Modifica
+									,@Modifica+'_CRE'
 									,fechaHoraModificacion
 									,idBodegaDestino
 									,numeroLote
 						FROM    invAplicacionItemDetalle ap		
 						INNER JOIN #idsDetalle de 
 				        ON ap.idAplicacionItem      = de.idAplicacionItem
+						AND ap.idAplicacionItemDetalle=de.idAplicacionItemDetalle
 				        AND ap.idPiscina            = de.idPiscina
 				        WHERE ap.idAplicacionItem   = @idAplicacionItem
+						AND de.zona               = @idZona
+				        AND de.camaronera         = @CodCamaronera
+				        AND de.sector             = @CodSector
 
 
 					--inactivo los detalle antiguo migrado a la nueva transaccion
 					UPDATE  d SET activo = 0,
-                    estacionModificacion = @Modifica
+                    estacionModificacion = @Modifica+'_ANU'
 					FROM  invAplicacionItemDetalle d 
 					INNER JOIN #idsDetalle de 
 				    ON d.idAplicacionItem    = de.idAplicacionItem
+					AND d.idAplicacionItemDetalle=de.idAplicacionItemDetalle
 				    AND d.idPiscina          = de.idPiscina
 				    WHERE d.idAplicacionItem = @idAplicacionItem
+					AND de.zona               = @idZona
+				    AND de.camaronera         = @CodCamaronera
+				    AND de.sector             = @CodSector
 				   END
 			
 			       UPDATE #idsAplicacionItem SET procesado = 1 
 				   WHERE idAplicacionItem        = @idAplicacionItem AND 
-						 procesado				 = 0  
+						 procesado				 = 0 
+					AND zona               = @idZona
+				    AND camaronera         = @CodCamaronera
+				    AND sector             = @CodSector
 		  END
 
 
@@ -228,20 +268,34 @@ DECLARE @Modifica VARCHAR(75)   = 'HOLAMUNDO'
 				  ,de.idPiscina  
 				  ,0 idCabActual
 				  ,0 idDetActual
+				  ,ca.codigoZona AS zona
+				  ,ca.codigoCamaronera AS camaronera
+				  ,ca.codigoSector  AS sector
+				  ,mp.CODIGOZONA_NEW
+				  ,mp.CODIGOCAMARONERA_NEW
+				  ,mp.CODIGOSECTOR_NEW
 		  INTO #ids2Detalle
 		  FROM invPedidoDetalle de 
 		  INNER JOIN tempMigracionPiscina mp 
 		  ON de.idPiscina    =  mp.IDPISCINA  
+		  INNER JOIN invPedido ca 
+		  ON de.idPedido    = ca.idPedido
 
 
-		  SELECT DISTINCT  idPedido,  
-                           0 procesado
+		  SELECT DISTINCT  idPedido
+		  			       ,zona
+				           ,camaronera
+				           ,sector
+                           ,0 procesado
 		  INTO #idsPedido
 		  FROM #ids2Detalle 
 
 		  WHILE EXISTS(SELECT TOP 1 1 FROM #idsPedido WHERE procesado = 0)
 		  BEGIN
-				SELECT TOP 1	@idPedido          = idPedido
+				SELECT TOP 1 @idPedido  = idPedido,
+				            	@idZona = zona,
+			             @CodCamaronera = camaronera,
+			                 @CodSector = sector
 					    FROM	#idsPedido  
 						WHERE	procesado = 0 
 						ORDER BY idPedido;
@@ -255,21 +309,35 @@ DECLARE @Modifica VARCHAR(75)   = 'HOLAMUNDO'
 				INNER JOIN #ids2Detalle de 
 				ON ap.idPedidoDetalle=de.idPedidoDetalle
 				AND ap.idPiscina=de.idPiscina
-				WHERE ap.idPedido =@idPedido;
+				WHERE ap.idPedido    = @idPedido
+				AND de.zona          = @idZona
+				AND de.camaronera    = @CodCamaronera
+				AND de.sector        = @CodSector;
 
 
 				 IF(@ContarDetalle=@Count)--si la transaccion es un solo detalle con una sola piscina distinta , basta con actualizar la cabecera
 				 BEGIN
+				 	 print 'INGRESO'
+				  	 print 
+							 'INGRESO MOD SIMPLE'    +  
+							 + '|' + cast(@idPedido as varchar(15))    
+						     + '|' + cast(@Count as varchar(15))
+							 + '|' + cast(@ContarDetalle as varchar(15))
+
 				   UPDATE  A SET    
 						   A.codigoZONA           = mp.CODIGOZONA_NEW,
 						   A.codigocamaronera     = mp.CODIGOCAMARONERA_NEW,
 						   A.codigosector         = mp.CODIGOSECTOR_NEW,
-						   A.estacionModificacion = @Modifica
-				   FROM    tempMigracionPiscina MP INNER JOIN invPedido A
-					  ON   A.codigoZONA           = MP.CODIGOZONA_OLD
-					  AND  A.codigocamaronera     = MP.CODIGOCAMARONERA_OLD
-					  AND  A.codigosector         = MP.CODIGOSECTOR_OLD
-				   WHERE idPedido                 = @idPedido
+						   A.estacionModificacion = @Modifica+'_MODCAB'
+				   FROM    invPedido A
+				   INNER JOIN #ids2Detalle mp
+					  ON   A.codigoZONA           = MP.zona
+					  AND  A.codigocamaronera     = MP.camaronera
+					  AND  A.codigosector         = MP.sector
+				   WHERE A.idPedido               = @idPedido
+				   	AND A.codigoZona              = @idZona
+					AND A.codigoCamaronera        = @CodCamaronera
+					AND A.codigoSector            = @CodSector
 				  END
 
 				  IF(@ContarDetalle!=@Count)--si la transaccion es mas detalle , crear la cabecera con los nuevos campos , crear el detalle con el item a migrar y en el antiguo detalle los desactivamos
@@ -285,13 +353,24 @@ DECLARE @Modifica VARCHAR(75)   = 'HOLAMUNDO'
 						DECLARE @Ids INT = (SELECT COUNT(1) FROM invPedidoDetalle ap
 						                     INNER JOIN #ids2Detalle de 
 				                             ON ap.idPedido           = de.idPedido
+											 AND ap.idPedidoDetalle   = de.idPedidoDetalle
 				                             AND ap.idPiscina         = de.idPiscina
-				                             WHERE ap.idPedidoDetalle = @idPedido)
+				                             WHERE ap.idPedidoDetalle = @idPedido
+											 AND de.zona              = @idZona
+					                         AND de.camaronera        = @CodCamaronera
+					                         AND de.sector            = @CodSector)
 
 						UPDATE invSecuencial 
 						SET @ultimaSecuenciaDetalle = ultimaSecuencia,
 							ultimaSecuencia			= ultimaSecuencia + @Ids  -- Valor arbitrario pero seguro
 						WHERE tabla                 = 'PedidoDetalle'
+
+				         PRINT 
+							 'PEDIDO'    + cast(@ultimaSecuenciaCabecera as varchar(15))    
+							 + '|' + cast(@idPedido as varchar(15))   
+							 + '|' + cast(@ultimaSecuenciaDetalle as varchar(15))  
+						     + '|' + cast(@Count as varchar(15))
+							 + '|' + cast(@ContarDetalle as varchar(15))
 
 						--crear la cabecera con los nuevos campos 
 						INSERT INTO [dbo].[invPedido]
@@ -320,7 +399,7 @@ DECLARE @Modifica VARCHAR(75)   = 'HOLAMUNDO'
 									   ,[codigoRolPiscina]
 									   ,[estadoRecepcion])
 		                 SELECT  TOP 1   @ultimaSecuenciaCabecera
-										,codigo
+										,RIGHT('0000000000'+ cast(@ultimaSecuenciaCabecera as varchar(10)), 9)
 										,codigoEmpresa
 										,codigoDivision
 										,CODIGOZONA_NEW 
@@ -337,7 +416,7 @@ DECLARE @Modifica VARCHAR(75)   = 'HOLAMUNDO'
 										,estacionCreacion
 										,fechaHoraCreacion
 										,usuarioModificacion
-										,@Modifica
+										,@Modifica+'_CRE'
 										,fechaHoraModificacion
 										,estadoProceso
 										,responsable
@@ -345,10 +424,11 @@ DECLARE @Modifica VARCHAR(75)   = 'HOLAMUNDO'
 										,estadoRecepcion
 						FROM 	   invPedido A
 					    INNER JOIN #ids2Detalle MP 
-					    ON   A.idPedido  = Mp.idPedido
-						INNER JOIN tempMigracionPiscina d
-					    ON mp.idPiscina  = d.IDPISCINA
-						WHERE A.idPedido = @idPedido
+					    ON   A.idPedido        = Mp.idPedido
+						WHERE A.idPedido       = @idPedido
+						AND A.codigoZona       = @idZona
+					    AND A.codigoCamaronera = @CodCamaronera
+					    AND A.codigoSector     = @CodSector
 
 					  --crear los detalles por piscina con los nuevos campos 
 						INSERT INTO [dbo].[invPedidoDetalle]
@@ -372,7 +452,7 @@ DECLARE @Modifica VARCHAR(75)   = 'HOLAMUNDO'
 									,[motivoExtraordinario]
 									,[observacion]
 									,[estadoPedidoDetalle])
-					    SELECT      (ROW_NUMBER() OVER(ORDER BY idPedidoDetalle)  + @ultimaSecuenciaDetalle) 
+					    SELECT      (ROW_NUMBER() OVER(ORDER BY ap.idPedidoDetalle)  + @ultimaSecuenciaDetalle) 
 									,@ultimaSecuenciaCabecera 
 									,ap.idPiscina
 									,idPiscinaEjecucion
@@ -387,32 +467,43 @@ DECLARE @Modifica VARCHAR(75)   = 'HOLAMUNDO'
 									,estacionCreacion
 									,fechaHoraCreacion
 									,usuarioModificacion
-									,@Modifica
+									,@Modifica+'_CRE'
 									,fechaHoraModificacion
 									,motivoExtraordinario
 									,observacion
 									,estadoPedidoDetalle
 						FROM    invPedidoDetalle ap		
 						INNER JOIN #ids2Detalle de 
-				        ON ap.idPedido     = de.idPedido
-				        AND ap.idPiscina   = de.idPiscina
-				        WHERE ap.idPedido  = @idPedido  
+				        ON ap.idPedido         = de.idPedido
+						AND ap.idPedidoDetalle = de.idPedidoDetalle
+				        AND ap.idPiscina       = de.idPiscina
+				        WHERE ap.idPedido      = @idPedido  														   
+			            AND de.zona            = @idZona
+					    AND de.camaronera      = @CodCamaronera
+					    AND de.sector          = @CodSector
 
 					--inactivo los detalle antiguo migrado a la nueva transaccion
 					UPDATE  d SET activo = 0,
-                    estacionModificacion = @Modifica
+                    estacionModificacion = @Modifica+'_ANU'
 					FROM  invPedidoDetalle d 
 					INNER JOIN #ids2Detalle de 
-				    ON d.idPedido        = de.idPedido
-				    AND d.idPiscina      = de.idPiscina
-				    WHERE d.idPedido     = @idPedido
+				    ON d.idPedido         = de.idPedido
+					AND d.idPedidoDetalle = de.idPedidoDetalle
+				    AND d.idPiscina       = de.idPiscina
+				    WHERE d.idPedido      = @idPedido
+					AND de.zona           = @idZona
+					AND de.camaronera     = @CodCamaronera
+					AND de.sector         = @CodSector
 					                                                      
 																	  
 				   END 
 			
 			       UPDATE #idsPedido SET procesado = 1 
-				   WHERE  idPedido        = @idPedido AND 
-						  procesado		  = 0  
+				   WHERE  idPedido     = @idPedido AND 
+						  procesado	   = 0 
+					AND zona           = @idZona
+					AND camaronera     = @CodCamaronera
+					AND sector         = @CodSector
 		  END
 
 
@@ -434,21 +525,34 @@ DECLARE @Modifica VARCHAR(75)   = 'HOLAMUNDO'
 				  ,de.idBodegaDestino 
 				  ,0 idCabActual
 				  ,0 idDetActual
+				  ,ca.codigoZona AS zona
+				  ,ca.codigoCamaronera AS camaronera
+				  ,ca.codigoSector  AS sector
+				  ,mp.CODIGOZONA_NEW
+				  ,mp.CODIGOCAMARONERA_NEW
+				  ,mp.CODIGOSECTOR_NEW
 		  INTO #ids3Detalle
 		  FROM invRecepcionItems de 
 		  INNER JOIN  invBodega bo on de.idBodegaDestino=bo.idBodega AND  tipoBodega='00003'
-		  INNER JOIN tempMigracionPiscina mp on bo.idPiscina = mp.IDPISCINA   
+		  INNER JOIN tempMigracionPiscina mp on bo.idPiscina = mp.IDPISCINA 
+		  INNER JOIN  invRecepcionItemsCabecera ca ON de.idRecepcionItemsCabecera=ca.idRecepcionItemsCabecera
 
 
-		  SELECT DISTINCT  idRecepcionItemsCabecera,  
-                           0 procesado
+		  SELECT DISTINCT  idRecepcionItemsCabecera
+		  			      ,zona
+				          ,camaronera
+				          ,sector
+				          , 0 procesado
 		  INTO #idsRecepcion
 		  FROM #ids3Detalle 
 
 
 		  WHILE EXISTS(SELECT TOP 1 1 FROM #idsRecepcion WHERE procesado = 0)
 		  BEGIN
-				        SELECT TOP 1	@id = idRecepcionItemsCabecera
+				        SELECT TOP 1	@id = idRecepcionItemsCabecera,
+									@idZona = zona,
+			                 @CodCamaronera = camaronera,
+			                     @CodSector = sector
 					    FROM	#idsRecepcion  
 						WHERE	procesado  = 0
 						ORDER BY idRecepcionItemsCabecera;
@@ -462,20 +566,34 @@ DECLARE @Modifica VARCHAR(75)   = 'HOLAMUNDO'
 				INNER JOIN #ids3Detalle de 
 				ON ap.idRecepcionItems            = de.idRecepcionItems
 				AND ap.idBodegaDestino            = de.idBodegaDestino
-				WHERE ap.idRecepcionItemsCabecera = @id;
+				WHERE ap.idRecepcionItemsCabecera = @id
+				AND de.zona                       = @idZona
+			    AND de.camaronera                 = @CodCamaronera
+			    AND de.sector                     = @CodSector;
 
 				 IF(@ContarDetalle=@Count)--si la transaccion es un solo detalle con una sola piscina distinta , basta con actualizar la cabecera
 				 BEGIN
+
+				 	print 'INGRESO'
+				  	 print 
+							 'INGRESO MOD SIMPLE'    +  
+							 + '|' + cast(@id as varchar(15))    
+						     + '|' + cast(@Count as varchar(15))
+							 + '|' + cast(@ContarDetalle as varchar(15))
 				   UPDATE A SET    
 						  A.codigoZONA           = mp.CODIGOZONA_NEW,
 						  A.codigocamaronera     = mp.CODIGOCAMARONERA_NEW,
 						  A.codigosector         = mp.CODIGOSECTOR_NEW,
 						  a.estacionModificacion = @Modifica
-				   FROM   tempMigracionPiscina MP INNER JOIN invRecepcionItemsCabecera A
-					ON    A.codigoZONA           = MP.CODIGOZONA_OLD
-					AND   A.codigocamaronera     = MP.CODIGOCAMARONERA_OLD
-					AND   A.codigosector         = MP.CODIGOSECTOR_OLD
-				   WHERE   idRecepcionItemsCabecera   = @id
+				   FROM   invRecepcionItemsCabecera A
+				    INNER JOIN #ids3Detalle mp
+					ON    A.codigoZONA           = MP.zona
+					AND   A.codigocamaronera     = MP.camaronera
+					AND   A.codigosector         = MP.sector
+				   WHERE  A.idRecepcionItemsCabecera   = @id
+				   	AND A.codigoZona                   = @idZona
+					AND A.codigoCamaronera             = @CodCamaronera
+					AND A.codigoSector                 = @CodSector
 				 END
 
 				  IF(@ContarDetalle!=@Count)--si la transaccion es mas detalle , crear la cabecera con los nuevos campos , crear el detalle con el item a migrar y en el antiguo detalle los desactivamos
@@ -492,12 +610,22 @@ DECLARE @Modifica VARCHAR(75)   = 'HOLAMUNDO'
 						                                    INNER JOIN  #ids3Detalle de ON
 															x.idRecepcionItemsCabecera       = de.idRecepcionItemsCabecera AND
 															x.idBodegaDestino                = de.idBodegaDestino
-															WHERE x.idRecepcionItemsCabecera = @id)
+															WHERE x.idRecepcionItemsCabecera = @id
+															AND de.Zona                   = @idZona
+					                                        AND de.camaronera             = @CodCamaronera
+					                                        AND de.sector                 = @CodSector)
 
 						UPDATE invSecuencial 
 						SET @ultimaSecuenciaDetalle = ultimaSecuencia,
 							ultimaSecuencia			= ultimaSecuencia + @IdsR  -- Valor arbitrario pero seguro
 						WHERE tabla                 = 'RecepcionItems'
+
+						PRINT 
+							 'RECEPCION'    + cast(@ultimaSecuenciaCabecera as varchar(15))    
+							 + '|' + cast(@id as varchar(15))   
+							 + '|' + cast(@ultimaSecuenciaDetalle as varchar(15))  
+						     + '|' + cast(@Count as varchar(15))
+							 + '|' + cast(@ContarDetalle as varchar(15))
 
 						--crear la cabecera con los nuevos campos 
 						INSERT INTO [dbo].[invRecepcionItemsCabecera]
@@ -535,14 +663,15 @@ DECLARE @Modifica VARCHAR(75)   = 'HOLAMUNDO'
 									,estacionCreacion
 									,fechaHoraCreacion
 									,usuarioModificacion
-									,@Modifica
+									,@Modifica+'_CRE'
 									,fechaHoraModificacion
 						FROM  invRecepcionItemsCabecera A
 						INNER JOIN #ids3Detalle MP 
 						ON   A.idRecepcionItemsCabecera  = Mp.idRecepcionItemsCabecera
-						INNER JOIN tempMigracionPiscina d
-				        ON mp.idPiscina                  = d.IDPISCINA
 						WHERE A.idRecepcionItemsCabecera = @id
+						AND A.codigoZona                 = @idZona
+					    AND A.codigoCamaronera           = @CodCamaronera
+					    AND A.codigoSector               = @CodSector
 		
 
 					  --crear los detalles por piscina con los nuevos campos 
@@ -570,7 +699,7 @@ DECLARE @Modifica VARCHAR(75)   = 'HOLAMUNDO'
 									,[numeroLote]
 									,[linea]
 									,[idRecepcionItemsCabecera])
-					    SELECT   (row_number() over(order by idRecepcionItems)  + @ultimaSecuenciaDetalle) 
+					    SELECT   (row_number() over(order by ap.idRecepcionItems)  + @ultimaSecuenciaDetalle) 
 								,idBodegaOrigen
 								,de.idBodegaDestino
 								,idItem
@@ -595,23 +724,33 @@ DECLARE @Modifica VARCHAR(75)   = 'HOLAMUNDO'
 								,@ultimaSecuenciaCabecera 
 						FROM    invRecepcionItems ap		
 						INNER JOIN #ids3Detalle de 
-				        ON ap.idRecepcionItemsCabecera    = de.idRecepcionItemsCabecera
-				        AND ap.idBodegaDestino    = de.idBodegaDestino
+				        ON ap.idRecepcionItemsCabecera = de.idRecepcionItemsCabecera
+						AND ap.idRecepcionItems        = de.idRecepcionItems
+				        AND ap.idBodegaDestino         = de.idBodegaDestino
 				        WHERE ap.idRecepcionItemsCabecera = @id 
+						AND de.zona                 = @idZona
+					    AND de.camaronera           = @CodCamaronera
+					    AND de.sector               = @CodSector
 
 					--inactivo los detalle antiguo migrado a la nueva transaccion
 					 UPDATE  d SET activo = 0,
-					 estacionModificacion = @Modifica
+					 estacionModificacion = @Modifica+'_ANU'
 					 FROM  invRecepcionItems d
 					 INNER JOIN #ids3Detalle de 
 				     ON d.idRecepcionItemsCabecera    = de.idRecepcionItemsCabecera
 				     AND d.idBodegaDestino            = de.idBodegaDestino
 				     WHERE d.idRecepcionItemsCabecera = @id 
+					 AND de.zona                 = @idZona
+					 AND de.camaronera           = @CodCamaronera
+					 AND de.sector               = @CodSector
 				   END
 			
 			       UPDATE #idsRecepcion SET procesado = 1
 				   WHERE  idRecepcionItemsCabecera    = @id	 AND 
-					      procesado		              = 0  
+					      procesado		              = 0 
+						 AND zona                 = @idZona
+					    AND camaronera            = @CodCamaronera
+					    AND sector               = @CodSector
 		  END
 		
 --ROLLBACK TRAN
