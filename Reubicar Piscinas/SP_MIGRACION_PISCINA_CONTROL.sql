@@ -1,7 +1,8 @@
---CREATE PROCEDURE SP_MIGRACION_PISCINA_PARAMETROS_CONTROL
---AS
---BEGIN
-BEGIN TRAN
+ALTER PROCEDURE SP_MIGRACION_PISCINA_PARAMETROS_CONTROL
+AS
+BEGIN
+--BEGIN TRAN
+--SET NOCOUNT ON;
 		  /*PROCESO DE PARAMETROS DE CONTROL */
           DECLARE @id INT = 0,
 		  @idZona CHAR(3) = '',
@@ -31,7 +32,6 @@ BEGIN TRAN
 		  INNER JOIN proControlParametro ca 
 		     ON de.idControlParametro = ca.idControlParametro
 		 
-		  --WHERE (ca.zona <> mp.CODIGOZONA_NEW) OR ca.sector <> mp.CODIGOSECTOR_NEW)
 
 		  SELECT DISTINCT 
 		           idControlParametro
@@ -71,27 +71,35 @@ BEGIN TRAN
 					AND de.zona                  = @idZona
 					AND de.camaronera            = @CodCamaronera
 					AND de.sector                = @CodSector
-
+				
 				IF(@Count = @Count1)--si la transaccion es un solo detalle con una sola piscina distinta , basta con actualizar la cabecera
 				BEGIN
+				  print 'INGRESO'
+				  	 print 
+							 'INGRESO MOD SIMPLE'    +  
+							 + '|' + cast(@id as varchar(15))    
+						     + '|' + cast(@Count as varchar(15))
+							 + '|' + cast(@Count1 as varchar(15))
 				   UPDATE A SET    
 						  A.zona                 = mp.CODIGOZONA_NEW,
 						  A.camaronera           = mp.CODIGOCAMARONERA_NEW,
 						  A.sector               = mp.CODIGOSECTOR_NEW,
 						  a.estacionModificacion = @Modifica +'_MOD'
-				   FROM    tempMigracionPiscina MP 
-				   INNER JOIN  proControlParametro A
-				     ON   A.zona                 = MP.CODIGOZONA_OLD
-					 AND  A.camaronera           = MP.CODIGOCAMARONERA_OLD
-					 AND  A.sector               = MP.CODIGOSECTOR_OLD
-			       WHERE  idControlParametro     = @id
-				   	AND zona                     = @idZona
-					AND camaronera               = @CodCamaronera
-					AND sector                   = @CodSector
+				   FROM    proControlParametro A
+				   inner join #idsControlDetalle mp
+				     ON   A.zona                 = MP.zona
+					 AND  A.camaronera           = MP.camaronera
+					 AND  A.sector               = MP.sector
+					 AND A.idControlParametro    = MP.idControlParametro
+			       WHERE  a.idControlParametro     = @id
+				   	AND A.zona                     = @idZona
+					AND A.camaronera               = @CodCamaronera
+					AND A.sector                   = @CodSector
 				END
 
 				  IF(@Count != @Count1)--si la transaccion es mas detalle , crear la cabecera con los nuevos campos , crear el detalle con el item a migrar y en el antiguo detalle los desactivamos
 				   BEGIN
+						
 						 --separamaos los secuenciles para la creacion
 					    DECLARE @ultimaSecuenciaCabecera INT
 						DECLARE @ultimaSecuenciaDetalle  INT
@@ -115,8 +123,19 @@ BEGIN TRAN
 							ultimaSecuencia			= ultimaSecuencia + @IdsNecesarios  -- Valor arbitrario pero seguro
 						WHERE tabla = 'ControlParametroDetalle'
 
-						--select @ultimaSecuenciaCabecera, @id, @IdsNecesarios
-						--select @ultimaSecuenciaDetalle, @Count
+						--print '@ultimaSecuenciaCabecera (IdParametroControl Nuevo): ' + cast(@ultimaSecuenciaCabecera as varchar(15))    
+						--	  + ', @id (IdParametroControl Actual): '      + cast(@id as varchar(15))   
+							  
+						--print '@ultimaSecuenciaDetalle:  (IdParametroControlDetalle Nuevo): ' + cast(@ultimaSecuenciaDetalle as varchar(15))  
+						--     + ', @Count (Contador sin filtro): '       + cast(@Count as varchar(15))
+						--	 + ', @Count1 (Contador con filtro): '      + cast(@Count1 as varchar(15))
+
+							 print 
+							 ''    + cast(@ultimaSecuenciaCabecera as varchar(15))    
+							 + '|' + cast(@id as varchar(15))   
+							 + '|' + cast(@ultimaSecuenciaDetalle as varchar(15))  
+						     + '|' + cast(@Count as varchar(15))
+							 + '|' + cast(@Count1 as varchar(15))
 						--crear la cabecera con los nuevos campos 
 						
 						INSERT INTO [dbo].[proControlParametro]
@@ -220,6 +239,7 @@ BEGIN TRAN
 						FROM    proControlParametroDetalle ap		
 						INNER JOIN #idsControlDetalle de 
 				                   ON ap.idControlParametro    = de.idControlParametro
+								   AND ap.idControlParametroDetalle = de.idControlParametroDetalle
 				                   AND ap.idPiscina            = de.idPiscina
 				        WHERE ap.idControlParametro            = @id
 			                     AND de.zona                   = @idZona
@@ -244,13 +264,19 @@ BEGIN TRAN
 					FROM  proControlParametroDetalle d 
 					INNER JOIN #idsControlDetalle de 
 				    ON d.idControlParametro    = de.idControlParametro
+					AND d.idControlParametroDetalle = de.idControlParametroDetalle
 				    AND d.idPiscina            = de.idPiscina
 				    WHERE d.idControlParametro = @id
 					AND de.zona                = @idZona
 					AND de.camaronera          = @CodCamaronera
 					AND de.sector              = @CodSector
 
-					
+					UPDATE A SET     
+						  a.estacionModificacion = @Modifica +'_MODCAB'
+				   FROM      proControlParametro A 
+			       WHERE  idControlParametro     = @id
+				   	 
+
 					UPDATE d
 					SET d.idDetActual=(SELECT idControlParametroDetalle
 					                   FROM  proControlParametroDetalle de WITH (NOLOCK) 
@@ -312,6 +338,9 @@ BEGIN TRAN
 						INNER JOIN #idsControlDetalle de 
 				        ON ap.idControlParametroDetalle    = de.idControlParametroDetalle
 				        WHERE de.idControlParametro        = @id
+						AND de.zona                 = @idZona
+					    AND de.camaronera           = @CodCamaronera
+					    AND de.sector               = @CodSector
 
 					UPDATE  d SET activo               = 0,
 					              estacionModificacion = @Modifica+'_ANU'
@@ -319,6 +348,9 @@ BEGIN TRAN
 					INNER JOIN #idsControlDetalle de 
 				    ON d.idControlParametroDetalle     = de.idControlParametroDetalle
 				    WHERE de.idControlParametro        = @id
+					AND de.zona                 = @idZona
+					AND de.camaronera           = @CodCamaronera
+					AND de.sector               = @CodSector
 
 				   END
 			
@@ -326,5 +358,30 @@ BEGIN TRAN
 															  procesado				 = 0  
 		  END
 
-ROLLBACK TRAN
---END
+		    SELECT COUNT(*) AS CONTROLES_ANULADOS      FROM proControlParametro WITH(NOLOCK) WHERE estacionModificacion = @Modifica+'_ANU'
+			SELECT COUNT(*) AS CONTROLES_CREADOS       FROM proControlParametro WITH(NOLOCK) WHERE estacionModificacion = @Modifica+'_CRE'
+		    SELECT COUNT(*) AS CONTROLES_ACTUALIZADOS  FROM proControlParametro WITH(NOLOCK) WHERE estacionModificacion = @Modifica +'_MOD' --AND estacionCreacion <> @Modifica AND ESTADO <> 'ANU'
+			SELECT COUNT(*) AS CONTROLES_ACTUALIZADOS  FROM proControlParametro WITH(NOLOCK) WHERE estacionModificacion = @Modifica +'_MODCAB'  
+
+			 --SELECT * FROM proControlParametro WITH(NOLOCK) WHERE idControlParametro = 172467--220466
+			 --SELECT * FROM proControlParametroDetalle WITH(NOLOCK) WHERE idControlParametro =172467-- 220466 
+			 --and activo =1
+			-- SELECT * FROM proControlParametroValorDetalle WITH(NOLOCK) 
+			--		WHERE idControlParametroDetalle in( SELECT idControlParametroDetalle FROM proControlParametroDetalle WITH(NOLOCK) 
+			--												WHERE idControlParametro = 220466 and activo =1)
+
+			--SELECT * FROM proControlParametroValorDetalle WITH(NOLOCK) 
+			--		WHERE idControlParametroDetalle in( SELECT idControlParametroDetalle FROM proControlParametroDetalle WITH(NOLOCK) 
+			--												WHERE idControlParametro = 220466 and activo =0) --24
+			--												order by valor
+			 --SELECT * FROM proControlParametro WITH(NOLOCK) WHERE idControlParametro = 223988
+			 --SELECT * FROM proControlParametroDetalle WITH(NOLOCK) WHERE idControlParametro = 223988 
+			 --SELECT * FROM proControlParametroValorDetalle WITH(NOLOCK) 
+				--	WHERE idControlParametroDetalle in( SELECT idControlParametroDetalle FROM proControlParametroDetalle WITH(NOLOCK) 
+				--											WHERE idControlParametro = 223988 and activo =1) --24
+				--													order by valor
+			--SELECT * FROM tempMigracionPiscina WHERE IDPISCINA IN (2635,2648)
+				  
+			 --SET NOCOUNT Off;
+--ROLLBACK TRAN
+ END
