@@ -1,16 +1,20 @@
-ALTER PROCEDURE SP_MIGRACION_PISCINA_PARAMETROS_CONTROL
+CREATE PROCEDURE [dbo].[SP_MIGRACION_PISCINA_PARAMETROS_CONTROL]
 AS
 BEGIN
---BEGIN TRAN
---SET NOCOUNT ON;
+ --BEGIN TRAN
+ SET NOCOUNT ON;
 		  /*PROCESO DE PARAMETROS DE CONTROL */
-          DECLARE @id INT = 0,
-		  @idZona CHAR(3) = '',
-   @CodCamaronera CHAR(5) = '',
-       @CodSector CHAR(5) = '',
-		       @Count INT = 0,
-		      @Count1 INT = 0,
-   @Modifica varchar(75)  = 'MIGRACION_20250505_PISCINA';
+          DECLARE @id INT        = 0,
+		  @idZona CHAR(3)        = '',
+		  @CodCamaronera CHAR(5) = '',
+          @CodSector CHAR(5)     = '',
+	      @idZona_NEW  CHAR(3)   = '',
+          @CodCamaronera_NEW  CHAR(5) = '',
+          @CodSector_NEW  CHAR(5)     = '',
+		  @Count INT  = 0,
+		  @Count1 INT = 0,
+          @Modifica varchar(75)  = 'MIGRACION_PISCINA_20250505', 
+		  @contadorRegistrosProcesados INT = 0;
 
 		  SELECT DISTINCT 
 		           de.idControlParametro
@@ -39,6 +43,9 @@ BEGIN
 				  ,camaronera
 				  ,sector
 		          ,0 procesado
+				  ,CODIGOZONA_NEW
+				  ,CODIGOCAMARONERA_NEW
+				  ,CODIGOSECTOR_NEW
 		  INTO #idsControl
 		  FROM #idsControlDetalle
 
@@ -49,14 +56,17 @@ BEGIN
 		  WHILE EXISTS(SELECT TOP 1 1 FROM #idsControl WHERE procesado = 0)
 		  BEGIN
 				SELECT TOP 1	
-				         @id = idControlParametro,
-			         @idZona = zona,
-			  @CodCamaronera = camaronera,
-			      @CodSector = sector
+				   @id     = idControlParametro,
+			       @idZona = zona,
+				   @CodCamaronera = camaronera,
+			       @CodSector     = sector,
+				   @idZona_NEW        = CODIGOZONA_NEW,
+				   @CodCamaronera_NEW =	CODIGOCAMARONERA_NEW,
+				   @CodSector_NEW	  =	CODIGOSECTOR_NEW
 		        FROM #idsControl 
 				WHERE procesado = 0 
 				ORDER BY idControlParametro
-
+				 
 				SELECT @Count1  =  COUNT(DISTINCT ap.idPiscina) 
 				FROM  proControlParametroDetalle ap 
 				WHERE ap.idControlParametro = @id
@@ -66,20 +76,23 @@ BEGIN
 				INNER JOIN #idsControlDetalle de 
 				ON ap.idControlParametro         = de.idControlParametro
 				--AND ap.idControlParametroDetalle = de.idControlParametroDetalle
-				AND ap.idPiscina                 = de.idPiscina
+				AND ap.idPiscina                 = de.idPiscina 
 				WHERE ap.idControlParametro      = @id
 					AND de.zona                  = @idZona
 					AND de.camaronera            = @CodCamaronera
 					AND de.sector                = @CodSector
-				
+					AND de.CODIGOZONA_NEW        = @idZona_NEW
+				    AND de.CODIGOCAMARONERA_NEW  = @CodCamaronera_NEW
+				    AND de.CODIGOSECTOR_NEW      = @CodSector_NEW
+					 
 				IF(@Count = @Count1)--si la transaccion es un solo detalle con una sola piscina distinta , basta con actualizar la cabecera
 				BEGIN
-				  print 'INGRESO'
-				  	 print 
-							 'INGRESO MOD SIMPLE'    +  
-							 + '|' + cast(@id as varchar(15))    
-						     + '|' + cast(@Count as varchar(15))
-							 + '|' + cast(@Count1 as varchar(15))
+				  --print 'INGRESO'
+				  --	 print 
+						--	 'INGRESO MOD SIMPLE'    +  
+						--	 + '|' + cast(@id as varchar(15))    
+						--     + '|' + cast(@Count as varchar(15))
+						--	 + '|' + cast(@Count1 as varchar(15))
 				   UPDATE A SET    
 						  A.zona                 = mp.CODIGOZONA_NEW,
 						  A.camaronera           = mp.CODIGOCAMARONERA_NEW,
@@ -95,6 +108,9 @@ BEGIN
 				   	AND A.zona                     = @idZona
 					AND A.camaronera               = @CodCamaronera
 					AND A.sector                   = @CodSector
+					AND mp.CODIGOZONA_NEW		   = @idZona_NEW
+				    AND mp.CODIGOCAMARONERA_NEW	   = @CodCamaronera_NEW
+				    AND mp.CODIGOSECTOR_NEW		   = @CodSector_NEW
 				END
 
 				  IF(@Count != @Count1)--si la transaccion es mas detalle , crear la cabecera con los nuevos campos , crear el detalle con el item a migrar y en el antiguo detalle los desactivamos
@@ -116,7 +132,10 @@ BEGIN
 				                                      WHERE ap.idControlParametro    = @id
 													  	AND zona                     = @idZona
 					                                    AND camaronera               = @CodCamaronera
-					                                    AND sector                   = @CodSector)
+					                                    AND sector                   = @CodSector
+														AND de.CODIGOZONA_NEW		   = @idZona_NEW
+														AND de.CODIGOCAMARONERA_NEW	   = @CodCamaronera_NEW
+														AND de.CODIGOSECTOR_NEW		   = @CodSector_NEW)
 
 						UPDATE proSecuencial 
 						SET @ultimaSecuenciaDetalle = ultimaSecuencia,
@@ -130,14 +149,31 @@ BEGIN
 						--     + ', @Count (Contador sin filtro): '       + cast(@Count as varchar(15))
 						--	 + ', @Count1 (Contador con filtro): '      + cast(@Count1 as varchar(15))
 
-							 print 
-							 ''    + cast(@ultimaSecuenciaCabecera as varchar(15))    
-							 + '|' + cast(@id as varchar(15))   
-							 + '|' + cast(@ultimaSecuenciaDetalle as varchar(15))  
-						     + '|' + cast(@Count as varchar(15))
-							 + '|' + cast(@Count1 as varchar(15))
+							 --print 
+							 --''    + cast(@ultimaSecuenciaCabecera as varchar(15))    
+							 --+ '|' + cast(@id as varchar(15))   
+							 --+ '|' + cast(@ultimaSecuenciaDetalle as varchar(15))  
+						  --   + '|' + cast(@Count as varchar(15))
+							 --+ '|' + cast(@Count1 as varchar(15))
+
 						--crear la cabecera con los nuevos campos 
 						
+						--IF(@id= 406)
+						--BEGIN
+						--	select *    FROM  proControlParametro A
+						--			  INNER JOIN #idsControlDetalle MP 
+						--			  ON   A.idControlParametro   = Mp.idControlParametro
+						--	WHERE A.idControlParametro            = @id
+						--			 AND a.zona                   = @idZona
+						--				AND a.camaronera             = @CodCamaronera
+						--				AND a.sector                 = @CodSector
+						--			 AND mp.CODIGOZONA_NEW		  = @idZona_NEW
+						--			 AND mp.CODIGOCAMARONERA_NEW  = @CodCamaronera_NEW
+						--			 AND mp.CODIGOSECTOR_NEW      = @CodSector_NEW
+								 
+						--	select  *, @CodSector [@CodSector] from #idsControlDetalle where   idControlParametro= 406
+						--END
+
 						INSERT INTO [dbo].[proControlParametro]
 								   ([idControlParametro]
 								   ,[empresa]
@@ -196,7 +232,9 @@ BEGIN
 							     AND a.zona                   = @idZona
 					             AND a.camaronera             = @CodCamaronera
 					             AND a.sector                 = @CodSector
-						                
+								 AND mp.CODIGOZONA_NEW		  = @idZona_NEW
+								 AND mp.CODIGOCAMARONERA_NEW  = @CodCamaronera_NEW
+								 AND mp.CODIGOSECTOR_NEW      = @CodSector_NEW
 
 
 						--select top 1 * From proControlParametro order by idControlParametro desc
@@ -245,7 +283,9 @@ BEGIN
 			                     AND de.zona                   = @idZona
 					             AND de.camaronera             = @CodCamaronera
 					             AND de.sector                 = @CodSector
-
+								 AND de.CODIGOZONA_NEW		  = @idZona_NEW
+								 AND de.CODIGOCAMARONERA_NEW  = @CodCamaronera_NEW
+								 AND de.CODIGOSECTOR_NEW      = @CodSector_NEW
 
 						   
 
@@ -265,11 +305,14 @@ BEGIN
 					INNER JOIN #idsControlDetalle de 
 				    ON d.idControlParametro    = de.idControlParametro
 					AND d.idControlParametroDetalle = de.idControlParametroDetalle
-				    AND d.idPiscina            = de.idPiscina
-				    WHERE d.idControlParametro = @id
-					AND de.zona                = @idZona
-					AND de.camaronera          = @CodCamaronera
-					AND de.sector              = @CodSector
+				    AND d.idPiscina					= de.idPiscina
+				    WHERE d.idControlParametro		= @id
+					AND de.zona						= @idZona
+					AND de.camaronera				= @CodCamaronera
+					AND de.sector					= @CodSector
+					AND de.CODIGOZONA_NEW			= @idZona_NEW
+					AND de.CODIGOCAMARONERA_NEW		= @CodCamaronera_NEW
+					AND de.CODIGOSECTOR_NEW			= @CodSector_NEW
 
 					UPDATE A SET     
 						  a.estacionModificacion = @Modifica +'_MODCAB'
@@ -278,27 +321,32 @@ BEGIN
 				   	 
 
 					UPDATE d
-					SET d.idDetActual=(SELECT idControlParametroDetalle
-					                   FROM  proControlParametroDetalle de WITH (NOLOCK) 
-					                   WHERE de.idControlParametro = @ultimaSecuenciaCabecera 
-					                   AND de.idPiscina=d.idPiscina),
-					    d.idCabActual          = @ultimaSecuenciaCabecera
+					SET d.idDetActual =(SELECT idControlParametroDetalle
+										   FROM  proControlParametroDetalle de WITH (NOLOCK) 
+										   WHERE de.idControlParametro = @ultimaSecuenciaCabecera 
+										   AND de.idPiscina=d.idPiscina),
+					    d.idCabActual = @ultimaSecuenciaCabecera
 					FROM   #idsControlDetalle d
 					WHERE d.idControlParametro = @id 
 				    AND d.zona                 = @idZona
 					AND d.camaronera           = @CodCamaronera
 					AND d.sector               = @CodSector
-
+					AND d.CODIGOZONA_NEW			= @idZona_NEW
+					AND d.CODIGOCAMARONERA_NEW		= @CodCamaronera_NEW
+					AND d.CODIGOSECTOR_NEW			= @CodSector_NEW
 
 
                 	DECLARE @IdsValor INT = (SELECT COUNT(1)
 						                     FROM proControlParametroValorDetalle 	ap		
-						                     INNER JOIN #idsControlDetalle de 
+						                     INNER JOIN #idsControlDetalle          de 
 				                             ON ap.idControlParametroDetalle    = de.idControlParametroDetalle
 				                             WHERE de.idControlParametro        = @id
 											 AND de.zona                 = @idZona
 					                         AND de.camaronera           = @CodCamaronera
-					                         AND de.sector               = @CodSector), @ultimaSecuenciaV INT=0;
+					                         AND de.sector               = @CodSector
+                                             AND de.CODIGOZONA_NEW			= @idZona_NEW
+											 AND de.CODIGOCAMARONERA_NEW    = @CodCamaronera_NEW
+											 AND de.CODIGOSECTOR_NEW        = @CodSector_NEW), @ultimaSecuenciaV INT=0;
 
 					UPDATE proSecuencial 
 					SET @ultimaSecuenciaV = ultimaSecuencia,
@@ -341,6 +389,9 @@ BEGIN
 						AND de.zona                 = @idZona
 					    AND de.camaronera           = @CodCamaronera
 					    AND de.sector               = @CodSector
+          AND de.CODIGOZONA_NEW		= @idZona_NEW
+					    AND de.CODIGOCAMARONERA_NEW = @CodCamaronera_NEW
+					    AND de.CODIGOSECTOR_NEW		= @CodSector_NEW
 
 					UPDATE  d SET activo               = 0,
 					              estacionModificacion = @Modifica+'_ANU'
@@ -351,6 +402,9 @@ BEGIN
 					AND de.zona                 = @idZona
 					AND de.camaronera           = @CodCamaronera
 					AND de.sector               = @CodSector
+					AND de.CODIGOZONA_NEW			= @idZona_NEW
+					AND de.CODIGOCAMARONERA_NEW		= @CodCamaronera_NEW
+					AND de.CODIGOSECTOR_NEW			= @CodSector_NEW
 
 				   END
 			
@@ -359,6 +413,13 @@ BEGIN
 														 AND zona                 = @idZona
 					                                     AND camaronera           = @CodCamaronera
 					                                     AND sector               = @CodSector
+														 AND CODIGOZONA_NEW		  = @idZona_NEW
+														 AND CODIGOCAMARONERA_NEW = @CodCamaronera_NEW
+														 AND CODIGOSECTOR_NEW	   = @CodSector_NEW
+
+				
+				 --   SELECT  @contadorRegistrosProcesados = COUNT(*) FROM #idsControl WHERE procesado = 0
+					--PRINT  'REGISTROS FALTANTES: '       + CAST (@contadorRegistrosProcesados as varchar(10))
 		  END
 
 		 --   SELECT COUNT(*) AS CONTROLES_ANULADOS      FROM proControlParametro WITH(NOLOCK) WHERE estacionModificacion = @Modifica+'_ANU'
@@ -384,7 +445,6 @@ BEGIN
 				--											WHERE idControlParametro = 223988 and activo =1) --24
 				--													order by valor
 			--SELECT * FROM tempMigracionPiscina WHERE IDPISCINA IN (2635,2648)
-				  
-			 --SET NOCOUNT Off;
+			 SET NOCOUNT Off;
 --ROLLBACK TRAN
- END
+ END 
