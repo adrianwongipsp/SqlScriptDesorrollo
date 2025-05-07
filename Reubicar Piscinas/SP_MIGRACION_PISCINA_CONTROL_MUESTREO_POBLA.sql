@@ -3,15 +3,18 @@ ALTER PROCEDURE SP_MIGRACION_PISCINA_CONTROL_MUESTREO_POBLACION
 AS
 BEGIN
 --BEGIN TRAN	 
---SET NOCOUNT ON;
+SET NOCOUNT ON;
 		   /*PROCESO  DE MUESTREOS DE POBLACION */
-          DECLARE @id INT = 0,
-		  @idZona CHAR(3) = '',
-   @CodCamaronera CHAR(5) = '',
-       @CodSector CHAR(5) = '',
-		       @Count INT = 0,
-		      @Count1 INT = 0,
-    @Modifica varchar(75) = 'MIGRACION_PISCINA_20250505';
+          DECLARE   @id INT = 0,
+		    @idZona CHAR(3) = '',
+     @CodCamaronera CHAR(5) = '',
+         @CodSector CHAR(5) = '',
+       @idZona_NEW  CHAR(3) = '',
+@CodCamaronera_NEW  CHAR(5) = '',
+    @CodSector_NEW  CHAR(5) = '',
+		         @Count INT = 0,
+		        @Count1 INT = 0,
+      @Modifica varchar(75) = 'MIGRACION_PISCINA_20250505';
 
 		  SELECT DISTINCT  
 		           de.idMuestreo
@@ -40,6 +43,9 @@ BEGIN
 				  ,camaronera
 				  ,sector
 		          ,0 procesado
+				  ,CODIGOZONA_NEW
+				  ,CODIGOCAMARONERA_NEW
+				  ,CODIGOSECTOR_NEW
 		  INTO #idsControl
 		  FROM #idsControlDetalle
 
@@ -50,7 +56,10 @@ BEGIN
 				     @id = idMuestreo,
 				 @idZona = zona,
 		  @CodCamaronera = camaronera,
-			  @CodSector = sector
+			  @CodSector = sector,
+		     @idZona_NEW = CODIGOZONA_NEW,
+	  @CodCamaronera_NEW = CODIGOCAMARONERA_NEW,
+	      @CodSector_NEW = CODIGOSECTOR_NEW
 		        FROM #idsControl 
 				WHERE procesado=0
 				order by idMuestreo
@@ -68,6 +77,9 @@ BEGIN
 				AND de.zona         = @idZona
 			    AND de.camaronera   = @CodCamaronera
 			    AND de.sector       = @CodSector
+				AND de.CODIGOZONA_NEW        = @idZona_NEW
+				AND de.CODIGOCAMARONERA_NEW  = @CodCamaronera_NEW
+				AND de.CODIGOSECTOR_NEW      = @CodSector_NEW
 
 				IF(@Count = @Count1)--si la transaccion es un solo detalle con una sola piscina distinta , basta con actualizar la cabecera
 				BEGIN
@@ -90,6 +102,12 @@ BEGIN
 					 AND  A.sector             = MP.sector
 					 AND  A.idMuestreo         = mp.idMuestreo
 			       WHERE  A.idMuestreo         = @id
+				   	AND A.zona                 = @idZona
+					AND A.camaronera           = @CodCamaronera
+					AND A.sector               = @CodSector
+					AND mp.CODIGOZONA_NEW	   = @idZona_NEW
+				    AND mp.CODIGOCAMARONERA_NEW= @CodCamaronera_NEW
+				    AND mp.CODIGOSECTOR_NEW	   = @CodSector_NEW
 				END
 
 				  IF(@Count != @Count1)--si la transaccion es mas detalle , crear la cabecera con los nuevos campos , crear el detalle con el item a migrar y en el antiguo detalle los desactivamos
@@ -103,12 +121,15 @@ BEGIN
 						SET @IdsDeta         = (SELECT COUNT(1)
 						                              FROM proMuestreoPoblacionDetalleLance 	ap		
 						                                   INNER JOIN #idsControlDetalle de 
-				                                      ON ap.idMuestreo       = de.idMuestreo
-				                                         AND ap.idPiscina    = de.idPiscina
-				                                      WHERE ap.idMuestreo    = @id
-													  AND de.zona         = @idZona
-			                                          AND de.camaronera   = @CodCamaronera
-			                                          AND de.sector       = @CodSector)
+				                                      ON ap.idMuestreo            = de.idMuestreo
+				                                         AND ap.idPiscina         = de.idPiscina
+				                                      WHERE ap.idMuestreo         = @id
+													  AND de.zona                 = @idZona
+			                                          AND de.camaronera           = @CodCamaronera
+			                                          AND de.sector               = @CodSector
+													  AND de.CODIGOZONA_NEW		  = @idZona_NEW
+													  AND de.CODIGOCAMARONERA_NEW = @CodCamaronera_NEW
+													  AND de.CODIGOSECTOR_NEW	  = @CodSector_NEW													  )
 
 						UPDATE proSecuencial 
 						SET    @ultimaSecuenciaDetalle  = ultimaSecuencia,
@@ -185,11 +206,14 @@ BEGIN
 								,bogador
 						FROM 	proMuestreoPoblacion A
 						INNER JOIN #idsControlDetalle MP 
-						ON   A.idMuestreo   = Mp.idMuestreo
-						WHERE A.idMuestreo  = @id
-						 AND a.zona         = @idZona
-					     AND a.camaronera   = @CodCamaronera
-					     AND a.sector       = @CodSector
+						ON   A.idMuestreo             = Mp.idMuestreo
+						WHERE A.idMuestreo            = @id
+						 AND a.zona                   = @idZona
+					     AND a.camaronera             = @CodCamaronera
+					     AND a.sector                 = @CodSector
+						 AND mp.CODIGOZONA_NEW		  = @idZona_NEW
+						 AND mp.CODIGOCAMARONERA_NEW  = @CodCamaronera_NEW
+						 AND mp.CODIGOSECTOR_NEW      = @CodSector_NEW
 
 
 
@@ -265,6 +289,9 @@ BEGIN
 						 AND de.zona                   = @idZona
 					     AND de.camaronera             = @CodCamaronera
 					     AND de.sector                 = @CodSector
+						 AND de.CODIGOZONA_NEW		  = @idZona_NEW
+						 AND de.CODIGOCAMARONERA_NEW  = @CodCamaronera_NEW
+						 AND de.CODIGOSECTOR_NEW      = @CodSector_NEW
 			
 
 					--inactivo los detalle antiguo migrado a la nueva transaccion
@@ -279,6 +306,9 @@ BEGIN
 					AND de.zona             = @idZona
 					AND de.camaronera       = @CodCamaronera
 					AND de.sector           = @CodSector
+					AND de.CODIGOZONA_NEW	= @idZona_NEW
+					AND de.CODIGOCAMARONERA_NEW= @CodCamaronera_NEW
+					AND de.CODIGOSECTOR_NEW	= @CodSector_NEW
 
 					
 					UPDATE d
@@ -288,26 +318,32 @@ BEGIN
 					                   AND de.idPiscina=d.idPiscina),
 					    d.idCabActual=@ultimaSecuenciaCabecera
 					FROM   #idsControlDetalle d
-					WHERE d.idMuestreo = @id 
-					AND d.zona         = @idZona
-					AND d.camaronera   = @CodCamaronera
-					AND d.sector       = @CodSector
+					WHERE d.idMuestreo         = @id 
+					AND d.zona                 = @idZona
+					AND d.camaronera           = @CodCamaronera
+					AND d.sector               = @CodSector
+					AND d.CODIGOZONA_NEW	   = @idZona_NEW
+					AND d.CODIGOCAMARONERA_NEW = @CodCamaronera_NEW
+					AND d.CODIGOSECTOR_NEW	   = @CodSector_NEW
 
 				   UPDATE A SET     
-						  a.estacionModificacion = @Modifica +'_MOD'
-				   FROM      proMuestreoPoblacion A 
-			       WHERE  idMuestreo     = @id
+						  a.estacionModificacion = @Modifica +'_MODCAB'
+				   FROM   proMuestreoPoblacion A 
+			       WHERE  idMuestreo             = @id
 
 
 
                 	DECLARE @IdsC INT = (SELECT COUNT(1)
 						                     FROM proMuestreoPoblacionDetalleLance 	ap		
 						                     INNER JOIN #idsControlDetalle de 
-				                             ON ap.idMuestreoDetalle = de.idMuestreoDetalle
-				                             WHERE de.idMuestreo     = @id
-											 AND de.zona             = @idZona
-					                         AND de.camaronera       = @CodCamaronera
-					                         AND de.sector           = @CodSector), @ultimaSecuenciaC INT=0;
+				                             ON ap.idMuestreoDetalle     = de.idMuestreoDetalle
+				                             WHERE de.idMuestreo         = @id
+											 AND de.zona                 = @idZona
+					                         AND de.camaronera           = @CodCamaronera
+					                         AND de.sector               = @CodSector
+                                             AND de.CODIGOZONA_NEW	     = @idZona_NEW
+											 AND de.CODIGOCAMARONERA_NEW = @CodCamaronera_NEW
+											 AND de.CODIGOSECTOR_NEW     = @CodSector_NEW											 ), @ultimaSecuenciaC INT=0;
 
 					UPDATE proSecuencial 
 					SET @ultimaSecuenciaC = ultimaSecuencia,
@@ -347,31 +383,40 @@ BEGIN
 								  ,fechaHoraModificacion
 						FROM    proMuestreoPoblacionDetalleCaracteristica ap		
 						INNER JOIN #idsControlDetalle de 
-				        ON ap.idMuestreoDetalle = de.idMuestreoDetalle
-				        WHERE de.idMuestreo     = @id
-						AND de.zona             = @idZona
-					    AND de.camaronera       = @CodCamaronera
-					    AND de.sector           = @CodSector
+				        ON ap.idMuestreoDetalle     = de.idMuestreoDetalle
+				        WHERE de.idMuestreo         = @id
+						AND de.zona                 = @idZona
+					    AND de.camaronera           = @CodCamaronera
+					    AND de.sector               = @CodSector
+						AND de.CODIGOZONA_NEW		= @idZona_NEW
+					    AND de.CODIGOCAMARONERA_NEW = @CodCamaronera_NEW
+					    AND de.CODIGOSECTOR_NEW		= @CodSector_NEW
 
 					UPDATE  d SET activo               = 0, 
 					              estacionModificacion = @Modifica+'_ANU'
 					FROM  proMuestreoPoblacionDetalleCaracteristica d 
 					INNER JOIN #idsControlDetalle de 
-				    ON d.idMuestreoDetalle = de.idMuestreoDetalle
-				    WHERE de.idMuestreo    = @id
-				    AND de.zona            = @idZona
-					AND de.camaronera      = @CodCamaronera
-					AND de.sector          = @CodSector
+				    ON d.idMuestreoDetalle      = de.idMuestreoDetalle
+				    WHERE de.idMuestreo         = @id
+				    AND de.zona                 = @idZona
+					AND de.camaronera           = @CodCamaronera
+					AND de.sector               = @CodSector
+					AND de.CODIGOZONA_NEW	    = @idZona_NEW
+					AND de.CODIGOCAMARONERA_NEW	= @CodCamaronera_NEW
+					AND de.CODIGOSECTOR_NEW		= @CodSector_NEW
 
 
                 	DECLARE @IdsP INT = (SELECT COUNT(1)
 						                     FROM proMuestreoPoblacionProfundidadDetalle 	ap		
 						                     INNER JOIN #idsControlDetalle de 
-				                             ON ap.idMuestreoDetalle = de.idMuestreoDetalle
-				                             WHERE de.idMuestreo     = @id
-											 AND de.zona             = @idZona
-					                         AND de.camaronera       = @CodCamaronera
-					                         AND de.sector           = @CodSector), @ultimaSecuenciaP INT=0;
+				                             ON ap.idMuestreoDetalle     = de.idMuestreoDetalle
+				                             WHERE de.idMuestreo         = @id
+											 AND de.zona                 = @idZona
+					                         AND de.camaronera           = @CodCamaronera
+					                         AND de.sector               = @CodSector
+					                         AND de.CODIGOZONA_NEW	     = @idZona_NEW
+					                         AND de.CODIGOCAMARONERA_NEW = @CodCamaronera_NEW
+					                         AND de.CODIGOSECTOR_NEW	 = @CodSector_NEW	), @ultimaSecuenciaP INT=0;
 
 					UPDATE proSecuencial 
 					SET @ultimaSecuenciaP = ultimaSecuencia,
@@ -423,6 +468,9 @@ BEGIN
 						AND de.zona             = @idZona
 					    AND de.camaronera       = @CodCamaronera
 					    AND de.sector           = @CodSector
+					AND de.CODIGOZONA_NEW		= @idZona_NEW
+					AND de.CODIGOCAMARONERA_NEW	= @CodCamaronera_NEW
+					AND de.CODIGOSECTOR_NEW		= @CodSector_NEW
 
 					UPDATE  d SET activo               = 0,
 					              estacionModificacion = @Modifica+'_ANU'
@@ -433,14 +481,20 @@ BEGIN
 					AND de.zona            = @idZona
 					AND de.camaronera      = @CodCamaronera
 					AND de.sector          = @CodSector
+					AND de.CODIGOZONA_NEW			= @idZona_NEW
+					AND de.CODIGOCAMARONERA_NEW		= @CodCamaronera_NEW
+					AND de.CODIGOSECTOR_NEW			= @CodSector_NEW
 
 				   END
 			
-			       UPDATE #idsControl SET procesado = 1 WHERE idMuestreo     = @id	AND 
-															  procesado	     = 0 
-															  AND zona       = @idZona
-					                                          AND camaronera = @CodCamaronera
-					                                          AND sector     = @CodSector
+			       UPDATE #idsControl SET procesado = 1 WHERE idMuestreo               = @id	
+				                                              AND procesado	           = 0 
+															  AND zona                 = @idZona
+					                                          AND camaronera           = @CodCamaronera
+					                                          AND sector               = @CodSector
+															  AND CODIGOZONA_NEW	   = @idZona_NEW
+					                                          AND CODIGOCAMARONERA_NEW = @CodCamaronera_NEW
+					                                          AND CODIGOSECTOR_NEW	   = @CodSector_NEW
 
 
  
@@ -452,7 +506,7 @@ BEGIN
 			--SELECT COUNT(*) AS CONTROLES_CREADOS       FROM proMuestreoPoblacion WITH(NOLOCK) WHERE estacionModificacion = @Modifica+'_CRE'
 		 --   SELECT COUNT(*) AS CONTROLES_ACTUALIZADOS  FROM proMuestreoPoblacion WITH(NOLOCK) WHERE estacionModificacion = @Modifica +'_MOD' --AND estacionCreacion <> @Modifica AND ESTADO <> 'ANU'
 			--SELECT COUNT(*) AS CONTROLES_ACTUALIZADOS  FROM proMuestreoPoblacion WITH(NOLOCK) WHERE estacionModificacion = @Modifica +'_MODCAB' 
-			--SET NOCOUNT OFF;
+			SET NOCOUNT OFF;
 --ROLLBACK TRAN
 END
 

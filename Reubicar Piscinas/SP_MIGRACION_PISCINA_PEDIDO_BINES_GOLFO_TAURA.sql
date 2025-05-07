@@ -1,4 +1,4 @@
-CREATE PROCEDURE SP_MIGRACION_PISCINA_PEDIDO_BINES
+ALTER PROCEDURE SP_MIGRACION_PISCINA_PEDIDO_BINES
 AS
 BEGIN
 --BEGIN TRAN
@@ -8,11 +8,12 @@ BEGIN
           DECLARE @id     INT = 0,
 		          @Count  INT = 0,
 		          @Count1 INT = 0,
-			      @idZona   VARCHAR(20)  = '',
-				  @Modifica VARCHAR(75)  = 'MIGRACION_20250505_ZONA';
+			      @idZona      CHAR(3)  = '',
+				  @idZona_NEW  CHAR(3)  = '',
+				  @Modifica VARCHAR(75) = 'MIGRACION_20250505_ZONA';
 		
 		--Procesamiento en bloques para evitar ciclos extensos
-		CREATE TABLE #idsPedido (idPedidoBin INT, codigoZona VARCHAR(20), procesado bit);
+		CREATE TABLE #idsPedido (idPedidoBin INT, codigoZona CHAR(5), procesado bit, CODIGOZONA_NEW CHAR(5));
 
 		  SELECT DISTINCT  
 		           de.idPedidoBin
@@ -21,8 +22,8 @@ BEGIN
 				  ,de.idPiscina  
 				  ,0 idCabActual
 				  ,0 idDetActual
-				  ,ca.zona
-				  ,mp.CODIGOZONA_OLD codigoZona
+				  ,ca.zona AS codigoZona
+				  ,mp.CODIGOZONA_NEW 
 		  INTO #idsPedidoDetalle
 		  FROM proPedidoBinDetalle de 
 		  INNER JOIN proPedidoBin ca          ON de.idPedidoBin = ca.idPedidoBin AND de.activo=1
@@ -32,7 +33,7 @@ BEGIN
 
 
 			INSERT INTO #idsPedido
-			SELECT distinct idPedidoBin, codigoZona, 0
+			SELECT distinct idPedidoBin, codigoZona, 0, CODIGOZONA_NEW
 			FROM #idsPedidoDetalle
 
 		  SELECT COUNT(1) AS PEDIDOS_INICIALES FROM #idsPedido
@@ -40,8 +41,9 @@ BEGIN
 		  WHILE EXISTS(SELECT TOP 1 1 FROM #idsPedido where procesado = 0)
 		  BEGIN
 				SELECT TOP 1	
-				     @id     = idPedidoBin,
-					 @idZona = codigoZona
+				     @id         = idPedidoBin,
+					 @idZona     = codigoZona,
+					 @idZona_NEW = CODIGOZONA_NEW
 		        FROM #idsPedido 
 				WHERE procesado = 0
 				ORDER BY idPedidoBin
@@ -57,9 +59,10 @@ BEGIN
 				AND ap.idPiscina     = de.idPiscina
 				WHERE ap.idPedidoBin = @id 
 				AND de.codigoZona    = @idZona
+				AND de.CODIGOZONA_NEW= @idZona_NEW
 
-				print '@Count1: ' + cast(@Count1 as varchar(10))
-				print '@Count: '  + cast(@Count  as varchar(10))
+				--print '@Count1: ' + cast(@Count1 as varchar(10))
+				--print '@Count: '  + cast(@Count  as varchar(10))
 
 				IF(@Count = @Count1)--si la transaccion es un solo detalle con una sola piscina distinta , basta con actualizar la cabecera
 				BEGIN
@@ -67,13 +70,13 @@ BEGIN
 				   UPDATE A SET    
 						  A.zona                 = mp.CODIGOZONA_NEW,
 				          A.estacionModificacion = @Modifica + '_MOD'
-				   FROM   tempMigracionPiscina MP 
-				   INNER JOIN  proPedidoBinDetalle B 
-				   ON MP.idPiscina= B.idPiscina
-				   INNER JOIN  proPedidoBin A
-				   ON     A.idPedidoBin       = B.idPedidoBin 
-			       WHERE  A.idPedidoBin       = @id
-				   AND    A.zona              = @idZona
+				   FROM    proPedidoBin A
+				   inner join #idsPedidoDetalle mp
+				   ON    A.idPedidoBin       = mp.idPedidoBin
+				     AND A.zona              = MP.codigoZona
+			       WHERE  mp.idPedidoBin     = @id
+				   AND    mp.codigoZona      = @idZona
+				   AND    mp.CODIGOZONA_NEW  = @idZona_NEW
 
 				END
 
@@ -91,7 +94,8 @@ BEGIN
 															ON ap.idPedidoBin = de.idPedidoBin
 															AND ap.idPiscina  = de.idPiscina
 				                                      WHERE ap.idPedidoBin    = @id
-													  AND de.codigoZona       = @idZona)
+													  AND de.codigoZona       = @idZona
+													  AND de.CODIGOZONA_NEW   = @idZona_NEW)
 
 						UPDATE proSecuencial 
 						SET    @ultimaSecuenciaDetalle  = ultimaSecuencia,
@@ -99,8 +103,8 @@ BEGIN
 						WHERE  tabla = 'PedidoBinDetalle'
 
 
-						print '@ultimaSecuenciaCabecera: '+cast(@ultimaSecuenciaCabecera as varchar(10)) +', @id: ' + cast(@id as varchar(10)) + ' ,@IdsDeta: ' + cast(@IdsDeta as varchar(10))
-						print '@ultimaSecuenciaDetalle: '+ cast(@ultimaSecuenciaDetalle   as varchar(10)) +', @Count: ' +  cast(@Count as varchar(10))
+						--print '@ultimaSecuenciaCabecera: '+cast(@ultimaSecuenciaCabecera as varchar(10)) +', @id: ' + cast(@id as varchar(10)) + ' ,@IdsDeta: ' + cast(@IdsDeta as varchar(10))
+						--print '@ultimaSecuenciaDetalle: '+ cast(@ultimaSecuenciaDetalle   as varchar(10)) +', @Count: ' +  cast(@Count as varchar(10))
 						--crear la cabecera con los nuevos campos 
 						
 
@@ -150,6 +154,7 @@ BEGIN
 						  ON  mp.idPiscina   = d.IDPISCINA
 						WHERE A.idPedidoBin  = @id
 						  AND mp.codigoZona  = @idZona
+						  AND mp.CODIGOZONA_NEW  = @idZona_NEW
 
 
 					INSERT INTO [dbo].[proPedidoBinDetalle]
@@ -205,6 +210,7 @@ BEGIN
 								   AND ap.idPiscina    = de.idPiscina
 				        WHERE ap.idPedidoBin           = @id
 						AND de.codigoZona              = @idZona
+						AND de.CODIGOZONA_NEW          = @idZona_NEW
 			
 
 					--inactivo los detalle antiguo migrado a la nueva transaccion
@@ -216,6 +222,7 @@ BEGIN
 				    AND d.idPiscina     = de.idPiscina	
 				    WHERE d.idPedidoBin = @id
 					AND de.codigoZona   = @idZona
+					AND de.CODIGOZONA_NEW = @idZona_NEW
 
 					
 					UPDATE d
@@ -223,10 +230,11 @@ BEGIN
 					                        FROM  proPedidoBinDetalle de WITH (NOLOCK) 
 					                       WHERE de.idPedidoBin = @ultimaSecuenciaCabecera 
 					                        AND de.idPiscina   = d.idPiscina),
-					    d.idCabActual   = @ultimaSecuenciaCabecera
+					    d.idCabActual    = @ultimaSecuenciaCabecera
 					FROM   #idsPedidoDetalle d
-					WHERE d.idPedidoBin = @id 
-					AND d.codigoZona    = @idZona
+					WHERE d.idPedidoBin  = @id 
+					AND d.codigoZona     = @idZona
+					AND d.CODIGOZONA_NEW = @idZona_NEW
 
 
 					UPDATE  d SET idPedidoBinDetalle   = de.idDetActual,
@@ -236,6 +244,7 @@ BEGIN
 				    ON d.idPedidoBinDetalle = de.idPedidoBinDetalle
 				    WHERE de.idPedidoBin    = @id
 					AND de.codigoZona       = @idZona
+					AND de.CODIGOZONA_NEW   = @idZona_NEW
 				   END 
 
 				   IF ((select count(1) from proPedidoBinDetalle where idPedidoBin = @id) = (select count(1) from proPedidoBinDetalle where idPedidoBin = @id and activo = 0))
@@ -243,9 +252,10 @@ BEGIN
 					 update  proPedidoBin set estado ='ANU', estacionModificacion=@Modifica + '_ANU' WHERE idPedidoBin = @id
 				   END
 
-			UPDATE #idsPedido SET procesado = 1 WHERE idPedidoBin     = @id	AND 
-								  					  procesado	      = 0  
-								  					  AND codigoZona  = @idZona
+			UPDATE #idsPedido SET procesado = 1 WHERE idPedidoBin         = @id	AND 
+								  					  procesado	          = 0  
+								  					  AND codigoZona      = @idZona
+													  AND CODIGOZONA_NEW  = @idZona_NEW
 
 
 		END
