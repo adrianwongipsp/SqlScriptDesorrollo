@@ -1,39 +1,63 @@
---BEGIN TRAN
---	 EX SP_MIGRACION_PISCINA_RECEPCION 1;
---ROLLBACK TRAN 
-
- CREATE PROCEDURE SP_MIGRACION_PISCINA_RECEPCION
+ 
+ ALTER PROCEDURE SP_MIGRACION_PISCINA_RECEPCION
 	@mostrarResultados bit  
  AS
  BEGIN 
 	 
           DECLARE @idRecepcion         INT; 
-		  DECLARE @idRecepcionDetalle  INT;  
+		  DECLARE @idRecepcionDetalle  INT, 
+				  @idZona CHAR(3)        = '',
+				  @CodCamaronera CHAR(5) = '',
+				  @CodSector CHAR(5)     = '',
+				  @idZona_NEW  CHAR(3)   = '',
+				  @CodCamaronera_NEW  CHAR(5) = '',
+				  @CodSector_NEW  CHAR(5)     = '';
+
 		  DECLARE @ContarDetalle			INT;  
 		  DECLARE @CountPiscinasMigrar      INT;
+		  DECLARE @Modifica varchar(75)  = 'MIGRACION_PISCINA_20250505';
+
 		  DROP TABLE IF EXISTS #cabRecepcionItem;
-		  DROP TABLE IF EXISTS #detRecepcionItem;
+		  DROP TABLE IF EXISTS #idsControlDetalle;
 
 
-		  SELECT  distinct ap.idRecepcion 	
-				           , ap.idRecepcionDetalle 
-				           , ap.idPiscina 	
-						   , 0 idrecepcionNuevo
+		  SELECT  distinct   de.idRecepcion 	
+				           , de.idRecepcionDetalle 
+				           , de.idPiscina 	
+						   , 0 idRecepcionNuevo
 					       , 0 idRecepcionDetalleNuevo
-			 INTO #detRecepcionItem 
-		  FROM proRecepcionEspecieDetalle ap inner join tempMigracionPiscina mp on ap.idPiscina = mp.IDPISCINA    
+						   , ca.zona
+						   , ca.camaronera
+						   , ca.sector
+						   , mp.CODIGOZONA_NEW
+						   , mp.CODIGOCAMARONERA_NEW
+						   , mp.CODIGOSECTOR_NEW
+			 INTO #idsControlDetalle 
+		  FROM proRecepcionEspecieDetalle de
+			INNER JOIN tempMigracionPiscina mp on de.idPiscina = mp.IDPISCINA    
+			INNER JOIN proRecepcionEspecie ca 
+		     ON de.idRecepcion = ca.idRecepcion
 
-           SELECT  distinct ap.idRecepcion,	
-					 0 procesado ,
-					 'UMIGRACION111' as tipoMigracion
+           SELECT  distinct    idRecepcion
+							  ,zona
+							  ,camaronera
+							  ,sector
+							  ,0 procesado
+							  ,CODIGOZONA_NEW
+							  ,CODIGOCAMARONERA_NEW
+							  ,CODIGOSECTOR_NEW
 					 into #cabRecepcionItem
-		  FROM #detRecepcionItem ap
-
-		  update #cabRecepcionItem set tipoMigracion=''
-
+		  FROM #idsControlDetalle  
+		   
 		  WHILE EXISTS(SELECT TOP 1 1 FROM #cabRecepcionItem WHERE procesado = 0)
 		  BEGIN
-				SELECT TOP 1	@idRecepcion                 = idRecepcion  
+				SELECT TOP 1	   @idRecepcion                 = idRecepcion,  
+								   @idZona = zona,
+								   @CodCamaronera = camaronera,
+								   @CodSector     = sector,
+								   @idZona_NEW        = CODIGOZONA_NEW,
+								   @CodCamaronera_NEW =	CODIGOCAMARONERA_NEW,
+								   @CodSector_NEW	  =	CODIGOSECTOR_NEW
 					    FROM	#cabRecepcionItem  
 						WHERE	procesado = 0 
 				ORDER BY idRecepcion
@@ -41,80 +65,79 @@
 
 				SELECT @CountPiscinasMigrar  =  COUNT(DISTINCT ap.idPiscina) 
 												FROM  proRecepcionEspecieDetalle ap 
-												INNER JOIN #detRecepcionItem de ON ap.idRecepcion=de.idRecepcion AND ap.idPiscina=de.idPiscina
 												WHERE 
 													ap.idRecepcion = @idRecepcion
 
-				SELECT @ContarDetalle  =  COUNT(distinct idPiscina) FROM  proRecepcionEspecieDetalle ap WHERE idRecepcion = @idRecepcion --and activo = 1 
-			    DECLARE @tipoMigracion varchar(15)
+				SELECT @ContarDetalle  =  COUNT(distinct ap.idPiscina) 
+											FROM  proRecepcionEspecieDetalle ap 
+											INNER JOIN #idsControlDetalle de 
+											ON ap.idRecepcion         = de.idRecepcion
+											--AND ap.idControlParametroDetalle = de.idControlParametroDetalle
+											AND ap.idPiscina                 = de.idPiscina 
+											WHERE de.idRecepcion = @idRecepcion 
+													AND de.zona                  = @idZona
+													AND de.camaronera            = @CodCamaronera
+													AND de.sector                = @CodSector
+													AND de.CODIGOZONA_NEW        = @idZona_NEW
+													AND de.CODIGOCAMARONERA_NEW  = @CodCamaronera_NEW
+													AND de.CODIGOSECTOR_NEW      = @CodSector_NEW
+
 				IF(@ContarDetalle = @CountPiscinasMigrar)--si la transaccion es un solo detalle con una sola piscina distinta , basta con actualizar la cabecera
 				  BEGIN
-				    set @tipoMigracion = 'UMIGRACION'
+
 				    UPDATE A SET    
 						  A.zona                 = mp.CODIGOZONA_NEW,
 						  A.camaronera			 = mp.CODIGOCAMARONERA_NEW,
 						  A.sector				 = mp.CODIGOSECTOR_NEW  ,
-						  A.estacionModificacion = @tipoMigracion
-					 FROM 
-							tempMigracionPiscina MP INNER JOIN proRecepcionEspecie A
-						   ON   A.zona       = MP.CODIGOZONA_OLD
-						  AND   A.camaronera = MP.CODIGOCAMARONERA_OLD
-						  AND   A.sector     = MP.CODIGOSECTOR_OLD
-					  WHERE idRecepcion = @idRecepcion 
+						  A.estacionModificacion = @Modifica +'_MOD'
+						  FROM    proRecepcionEspecie A
+						   inner join #idsControlDetalle mp
+							 ON   A.zona                 = MP.zona
+							 AND  A.camaronera           = MP.camaronera
+							 AND  A.sector               = MP.sector
+							 AND A.idRecepcion			 = MP.idRecepcion
+						  WHERE mp.idRecepcion			    = @idRecepcion
+				   			AND mp.zona                     = @idZona
+							AND mp.camaronera               = @CodCamaronera
+							AND mp.sector                   = @CodSector
+							AND mp.CODIGOZONA_NEW		    = @idZona_NEW
+							AND mp.CODIGOCAMARONERA_NEW	    = @CodCamaronera_NEW
+							AND mp.CODIGOSECTOR_NEW		    = @CodSector_NEW
 				  END
 				  ELSE
-				  BEGIN
-				      set @tipoMigracion = 'MIGRACION'
+				  BEGIN 
 					  --separamaos los secuenciles para la creacion
-					    DECLARE @ultimaSecuenciaCabecera			   INT
-						DECLARE @ultimaSecuenciaCabeceraCambioPlus	   INT 
-					    DECLARE @ultimaSecuenciaCabeceraSecuencial     INT
-						DECLARE @ultimaSecuenciaDetalle				   INT
-						DECLARE @ultimaSecuenciaDetalleCaracteristicas INT
-						DECLARE @ultimaSecuenciaDetalleParametros      INT
-
-						DECLARE @ultimaSecuenciaNuevaDetalle						INT
-						DECLARE @ultimaSecuenciaNuevaDetalleCaracteristicas	        INT
-						DECLARE @ultimaSecuenciaNuevaDetalleParametros              INT 
+					    DECLARE @ultimaSecuenciaCabecera			   INT  =0;
+						DECLARE @ultimaSecuenciaCabeceraCambioPlus	   INT  =0; 
+					    DECLARE @ultimaSecuenciaCabeceraSecuencial     INT  =0;
+						DECLARE @ultimaSecuenciaDetalle				   INT  =0;
+						DECLARE @ultimaSecuenciaDetalleCaracteristicas INT  =0;
+						DECLARE @ultimaSecuenciaDetalleParametros      INT  =0; 
+						--DECLARE @ultimaSecuenciaNuevaDetalle						  INT
+						--DECLARE @ultimaSecuenciaNuevaDetalleCaracteristicas         INT
+						--DECLARE @ultimaSecuenciaNuevaDetalleParametros              INT 
 
 						UPDATE proSecuencial SET ultimaSecuencia = ultimaSecuencia + 1 WHERE tabla = 'recepcionEspecie'
 						SELECT TOP 1 @ultimaSecuenciaCabecera = ultimaSecuencia  FROM proSecuencial WHERE tabla = 'recepcionEspecie'  
-						UPDATE proSecuencial SET ultimaSecuencia = ultimaSecuencia + 1 WHERE tabla = 'recepcionEspecieDetalleCambioPlus'
-						SELECT TOP 1 @ultimaSecuenciaCabeceraCambioPlus = ultimaSecuencia  FROM proSecuencial WHERE tabla = 'recepcionEspecieDetalleCambioPlus'  
-						 
-						---select @ultimaSecuenciaCabecera as [@ultimaSecuenciaCabecera]
+				
+						DECLARE @IdsNecesarios INT =  (SELECT COUNT(1)
+						                              FROM proRecepcionEspecieDetalle 	ap		
+						                                   INNER JOIN #idsControlDetalle de 
+				                                      ON ap.idRecepcion       = de.idRecepcion
+				                                         AND ap.idPiscina            = de.idPiscina
+				                                      WHERE de.idRecepcion			 = @idRecepcion
+													  	AND zona                     = @idZona
+					                                    AND camaronera               = @CodCamaronera
+					                                    AND sector                   = @CodSector
+														AND de.CODIGOZONA_NEW		   = @idZona_NEW
+														AND de.CODIGOCAMARONERA_NEW	   = @CodCamaronera_NEW
+														AND de.CODIGOSECTOR_NEW		   = @CodSector_NEW)
 
-						DECLARE @IdsNecesarios INT = (SELECT COUNT(1) FROM  #detRecepcionItem  dt  
-																		WHERE dt.idRecepcion = @idRecepcion) 
 						UPDATE proSecuencial 
 						SET @ultimaSecuenciaDetalle = ultimaSecuencia,
 							ultimaSecuencia			= ultimaSecuencia + @IdsNecesarios  -- Valor arbitrario pero seguro
-						WHERE tabla = 'recepcionEspecieDetalle'
-						--select @ultimaSecuenciaDetalle as [@ultimaSecuenciaDetalle], @IdsNecesarios [@IdsNecesarios]
-						DECLARE @IdsNecesariosCaracteristicas INT 
-						select @IdsNecesariosCaracteristicas =  COUNT(1) from proRecepcionEspecieCaracteristica   where idRecepcionDetalle in
-												(SELECT dt.idRecepcionDetalle FROM   #detRecepcionItem  dt  WHERE dt.idRecepcion = @idRecepcion) 
-						UPDATE proSecuencial 
-						SET @ultimaSecuenciaDetalleCaracteristicas = ultimaSecuencia,
-							ultimaSecuencia						  = ultimaSecuencia + @IdsNecesariosCaracteristicas  -- Valor arbitrario pero seguro
-						WHERE tabla = 'recepcionEspecieCaracteristica'
+						WHERE tabla = 'recepcionEspecieDetalle' 
 
-						
-						DECLARE @IdsNecesariosParametros INT 
-						select @IdsNecesariosParametros =  COUNT(1) from proRecepcionEspecieParametros   where idRecepcionDetalle in
-												(SELECT dt.idRecepcionDetalle FROM   #detRecepcionItem  dt  WHERE dt.idRecepcion = @idRecepcion)    
-						UPDATE proSecuencial 
-						SET @ultimaSecuenciaDetalleParametros   = ultimaSecuencia,
-							ultimaSecuencia						= ultimaSecuencia + @IdsNecesariosParametros  -- Valor arbitrario pero seguro
-						WHERE tabla = 'recepcionEspecieParametros'  
-						 
-						 	
-						DECLARE @IdsNecesariosSecuencial INT 
-						SELECT @IdsNecesariosSecuencial =  COUNT(1) FROM proRecepcionEspecieSecuencial WHERE  idRecepcion = @idRecepcion    
-						UPDATE proSecuencial 
-						SET @ultimaSecuenciaCabeceraSecuencial   = ultimaSecuencia,
-							ultimaSecuencia						= ultimaSecuencia + @IdsNecesariosSecuencial  -- Valor arbitrario pero seguro
-						WHERE tabla = 'recepcionEspecieSecuencial'  
 						--cabecera
 							INSERT INTO proRecepcionEspecie
 								   (idRecepcion,           
@@ -136,27 +159,159 @@
 									fechaRecepcion,        horaDespacho,     horaRecepcion,			 idResponsableSiembra,idEspecie,          tipoLarva,         cantidad,
 									cantidadPlus,          porcentajePlus,   unidadMedida,			 cantidadRecibida,    guiasRemision,      tieneFactura,      descripcion,
 									responsableEntrega,    estado,			 usuarioResponsable,     usuarioCreacion,     estacionCreacion,   fechaHoraCreacion, usuarioModificacion,
-									@tipoMigracion,        fechaHoraModificacion,
+								    @Modifica +'_CRE',        fechaHoraModificacion,
 									reprocesoContable  
 							FROM 		 proRecepcionEspecie A
-											INNER JOIN #detRecepcionItem B     ON A.idRecepcion = B.idRecepcion 
-											INNER JOIN tempMigracionPiscina MP ON  MP.IDPISCINA = B.idPiscina 
-							 WHERE A.idRecepcion = @idRecepcion
-								   
+											INNER JOIN #idsControlDetalle mp     
+											ON A.idRecepcion = mp.idRecepcion  
+							 WHERE   mp.idRecepcion = @idRecepcion
+							     AND mp.zona                   = @idZona
+					             AND mp.camaronera             = @CodCamaronera
+					             AND mp.sector                 = @CodSector
+								 AND mp.CODIGOZONA_NEW		   = @idZona_NEW
+								 AND mp.CODIGOCAMARONERA_NEW   = @CodCamaronera_NEW
+								 AND mp.CODIGOSECTOR_NEW       = @CodSector_NEW
+
+						--detalle
+						INSERT INTO proRecepcionEspecieDetalle	
+							(idRecepcionDetalle,     
+							 idRecepcion,          
+							 idPiscinaPlanificacion,    orden,              idPiscina,
+							 rolPiscina,              cantidad,             unidadMedida,              cantidadRecibida,   cantidadAdicional,
+							 idPiscinaEjecucion,      idCodigoGenetico,     idLaboratorioMaduracion,   codigoLarva,        biomasa,
+							 oxigeno,                 salinidad,            temperatura,               costoLarva,         costoServiciosPrestados,
+							 costoFlete,              amonio,               ph,                        alcalinidad,        conteoAlgas,
+							 descripcion,             numeroCajas,          numeroTinas,               tanqueOrigen,       plGramoLab,
+							 plGramoCam,              numeroArtemia,        calidadAgua,               tanqueCalidadAguaBuena, tanqueCalidadAguaRegular,
+							 tanqueCalidadAguaMala,   observacionParametro, observacionCaracteristica, activo,                  idMotivoAuditoria,
+							 usuarioCreacion,         estacionCreacion,     fechaHoraCreacion,         usuarioModificacion,     estacionModificacion,
+							 fechaHoraModificacion,   origenPlGramo)
+						SELECT 
+							ROW_NUMBER() OVER (ORDER BY D.idRecepcionDetalle) + @ultimaSecuenciaDetalle,  
+							@ultimaSecuenciaCabecera, 
+							idPiscinaPlanificacion,   orden,              D.idPiscina,
+							rolPiscina,              cantidad,             unidadMedida,              cantidadRecibida,			cantidadAdicional,
+							idPiscinaEjecucion,      idCodigoGenetico,     idLaboratorioMaduracion,   codigoLarva,				biomasa,
+							oxigeno,                 salinidad,            temperatura,               costoLarva,				costoServiciosPrestados,
+							costoFlete,              amonio,               ph,                        alcalinidad,				conteoAlgas,
+							descripcion,             numeroCajas,          numeroTinas,               tanqueOrigen,				plGramoLab,
+							plGramoCam,              numeroArtemia,        calidadAgua,               tanqueCalidadAguaBuena,   tanqueCalidadAguaRegular,
+							tanqueCalidadAguaMala,   observacionParametro, observacionCaracteristica, activo,                   idMotivoAuditoria,
+							usuarioCreacion,         estacionCreacion,     fechaHoraCreacion,         usuarioModificacion,      @Modifica +'_CRE',
+							fechaHoraModificacion,   origenPlGramo
+						FROM proRecepcionEspecieDetalle D 
+						INNER JOIN #idsControlDetalle DT 
+								ON D.idRecepcion =DT.idRecepcion 
+								AND D.idPiscina = DT.idPiscina
+								AND D.idRecepcionDetalle = DT.idRecepcionDetalle 
+						WHERE D.idRecepcion = @idRecepcion
+								AND DT.zona                   = @idZona
+								AND DT.camaronera             = @CodCamaronera
+								AND DT.sector                 = @CodSector
+								AND DT.CODIGOZONA_NEW		  = @idZona_NEW
+								AND DT.CODIGOCAMARONERA_NEW   = @CodCamaronera_NEW
+								AND DT.CODIGOSECTOR_NEW       = @CodSector_NEW
+											--inactivo los detalle antiguo migrado a la nueva transaccion
+					UPDATE  d SET activo               = 0,
+					              estacionModificacion = @Modifica+'_ANU'
+					FROM  proRecepcionEspecieDetalle d 
+					INNER JOIN #idsControlDetalle de 
+				    ON d.idRecepcion    = de.idRecepcion
+					AND d.idRecepcionDetalle = de.idRecepcionDetalle
+				    AND d.idPiscina					= de.idPiscina
+				    WHERE d.idRecepcion				= @idRecepcion
+					AND de.zona						= @idZona
+					AND de.camaronera				= @CodCamaronera
+					AND de.sector					= @CodSector
+					AND de.CODIGOZONA_NEW			= @idZona_NEW
+					AND de.CODIGOCAMARONERA_NEW		= @CodCamaronera_NEW
+					AND de.CODIGOSECTOR_NEW			= @CodSector_NEW
+
+				   IF ((SELECT COUNT(1) FROM proRecepcionEspecieDetalle WHERE idRecepcion = @idRecepcion) = 
+						(SELECT COUNT(1) FROM proRecepcionEspecieDetalle WHERE idRecepcion = @idRecepcion AND activo = 0))
+				   BEGIN
+					 UPDATE  proRecepcionEspecie SET estado ='ANU', estacionModificacion=@Modifica + '_ANUCAB' WHERE idRecepcion = @idRecepcion
+				   END
+				  ELSE 
+				   BEGIN
+				   		UPDATE A SET     
+						  a.estacionModificacion  = @Modifica +'_MODCAB'
+				        FROM      proRecepcionEspecie A 
+			            WHERE   idRecepcion = @idRecepcion
+				   END
+						--actualizo cab y det con sus id nuevos
+						UPDATE d
+							SET d.idRecepcionDetalleNuevo =(SELECT idRecepcionDetalle
+												   FROM  proRecepcionEspecieDetalle de WITH (NOLOCK) 
+												   WHERE de.idRecepcion = @ultimaSecuenciaCabecera 
+												   AND de.idPiscina=d.idPiscina),
+								d.idRecepcionNuevo = @ultimaSecuenciaCabecera
+							FROM   #idsControlDetalle d
+							WHERE d.idRecepcion				= @idRecepcion 
+							AND d.zona						= @idZona
+							AND d.camaronera				= @CodCamaronera
+							AND d.sector					= @CodSector
+							AND d.CODIGOZONA_NEW			= @idZona_NEW
+							AND d.CODIGOCAMARONERA_NEW		= @CodCamaronera_NEW
+							AND d.CODIGOSECTOR_NEW			= @CodSector_NEW
+
+
+					--plus
+					    DECLARE @IdsNecesariosPlus INT =  (SELECT COUNT(1)
+						                              FROM proRecepcionEspecieDetalleCambioPlus	ap		
+						                                   INNER JOIN #idsControlDetalle de 
+				                                      ON ap.idRecepcion       = de.idRecepcion
+				                                      WHERE de.idRecepcion			 = @idRecepcion
+													  	AND zona                     = @idZona
+					                                    AND camaronera               = @CodCamaronera
+					                                    AND sector                   = @CodSector
+														AND de.CODIGOZONA_NEW		   = @idZona_NEW
+														AND de.CODIGOCAMARONERA_NEW	   = @CodCamaronera_NEW
+														AND de.CODIGOSECTOR_NEW		   = @CodSector_NEW)
+
+						UPDATE proSecuencial SET @ultimaSecuenciaCabeceraCambioPlus = ultimaSecuencia ,
+												ultimaSecuencia = ultimaSecuencia + @IdsNecesariosPlus WHERE tabla = 'recepcionEspecieDetalleCambioPlus'
+					  
 						INSERT INTO proRecepcionEspecieDetalleCambioPlus
-							    (idRecepcionEspecieDetalleCambioPlus,   idRecepcion,			fechaCambioPlus,	
+							    (idRecepcionEspecieDetalleCambioPlus,   
+								 idRecepcion,			fechaCambioPlus,	
 							     porcentajePlusAnterior,				porcentajePlusActual,   usuarioCreacion, 
 							     estacionCreacion,						fechaHoraCreacion,		usuarioModificacion, 
 							     estacionModificacion,					fechaHoraModificacion)
 						SELECT 
-							  @ultimaSecuenciaCabeceraCambioPlus,  @ultimaSecuenciaCabecera, fechaCambioPlus,	
+							  ROW_NUMBER() OVER (ORDER BY A.idRecepcionEspecieDetalleCambioPlus) +  @ultimaSecuenciaCabeceraCambioPlus,  
+							  @ultimaSecuenciaCabecera,				fechaCambioPlus,	
 							  porcentajePlusAnterior,				porcentajePlusActual,     usuarioCreacion, 
 							  estacionCreacion,						fechaHoraCreacion,		  usuarioModificacion, 
-							  @tipoMigracion,                       fechaHoraModificacion
+							  @Modifica,							fechaHoraModificacion
 						FROM 
-						   proRecepcionEspecieDetalleCambioPlus A 
-						WHERE A.idRecepcion = @idRecepcion
-						   
+						   proRecepcionEspecieDetalleCambioPlus A 	
+						   INNER JOIN #idsControlDetalle mp     
+											ON A.idRecepcion = mp.idRecepcion  
+							 WHERE   mp.idRecepcion = @idRecepcion
+							     AND mp.zona                   = @idZona
+					             AND mp.camaronera             = @CodCamaronera
+					             AND mp.sector                 = @CodSector
+								 AND mp.CODIGOZONA_NEW		   = @idZona_NEW
+								 AND mp.CODIGOCAMARONERA_NEW   = @CodCamaronera_NEW
+								 AND mp.CODIGOSECTOR_NEW       = @CodSector_NEW 
+					  
+						---SECUENCIAL RECEPCION
+						    DECLARE @IdsNecesariosSecuencial INT =  (SELECT COUNT(1)
+						                              FROM proRecepcionEspecieSecuencial	ap		
+						                                   INNER JOIN #idsControlDetalle de 
+				                                      ON    de.idRecepcion              = ap.idRecepcion   
+				                                      WHERE de.idRecepcion			    = @idRecepcion
+													  	AND de.zona                     = @idZona
+					                                    AND de.camaronera               = @CodCamaronera
+					                                    AND de.sector                   = @CodSector
+														AND de.CODIGOZONA_NEW		    = @idZona_NEW
+														AND de.CODIGOCAMARONERA_NEW	    = @CodCamaronera_NEW
+														AND de.CODIGOSECTOR_NEW		    = @CodSector_NEW)
+
+						UPDATE proSecuencial SET @ultimaSecuenciaCabeceraSecuencial  = ultimaSecuencia ,
+												ultimaSecuencia = ultimaSecuencia + @IdsNecesariosSecuencial WHERE tabla = 'recepcionEspecieSecuencial'
+					    
 						INSERT INTO proRecepcionEspecieSecuencial
 							(idRecepcionSecuencial,	idRecepcion, 
 							 idLaboratorioLarva,    idLaboratorioMaduracion, idsLaboratorioMaduracion,
@@ -168,69 +323,99 @@
 							 idLaboratorioLarva,    idLaboratorioMaduracion, idsLaboratorioMaduracion,
 							 secuencia,				activo,		 
 							 usuarioCreacion,	    estacionCreacion,	     fechaHoraCreacion,
-							 usuarioModificacion,	@tipoMigracion,          fechaHoraModificacion 
+							 usuarioModificacion,	@Modifica,          fechaHoraModificacion 
 						FROM proRecepcionEspecieSecuencial A 
 						WHERE A.idRecepcion = @idRecepcion
 
-						-- After parent record insert
-						IF NOT EXISTS (SELECT 1 FROM proRecepcionEspecie WHERE idRecepcion = @ultimaSecuenciaCabecera)
-						BEGIN
-							RAISERROR('Failed to insert parent record with ID %d ID ORIGINAL %d', 16, 1, @ultimaSecuenciaCabecera, @idRecepcion)
-							-- Handle the error appropriately
-							SELECT 'REGISTRO TEMPORAL ANTES DE PROCESAR', @idRecepcion   
-							select * from #cabRecepcionItem WHERE idRecepcion = @idRecepcion
-							select * from #detRecepcionItem WHERE idRecepcion = @idRecepcion
-							ROLLBACK TRAN
-							RETURN
-						END
+							UPDATE  d SET activo               = 0,
+										  estacionModificacion = @Modifica+'_ANU'
+							FROM  proRecepcionEspecieSecuencial d 
+							INNER JOIN #idsControlDetalle de 
+							ON d.idRecepcion    = de.idRecepcion 
+							WHERE d.idRecepcion				= @idRecepcion
+							AND de.zona						= @idZona
+							AND de.camaronera				= @CodCamaronera
+							AND de.sector					= @CodSector
+							AND de.CODIGOZONA_NEW			= @idZona_NEW
+							AND de.CODIGOCAMARONERA_NEW		= @CodCamaronera_NEW
+							AND de.CODIGOSECTOR_NEW			= @CodSector_NEW
+					    --SUBDETALLE DE PARAMETROS
+						DECLARE @IdsNecesariosParametros INT =0;
+						SELECT  @IdsNecesariosParametros =  (SELECT COUNT(1)
+															 FROM proRecepcionEspecieParametros 	ap		
+															 INNER JOIN #idsControlDetalle          de 
+															 ON ap.idRecepcionDetalle    = de.idRecepcionDetalle
+															 WHERE de.idRecepcion        = @idRecepcion
+															 AND de.zona                 = @idZona
+															 AND de.camaronera           = @CodCamaronera
+															 AND de.sector               = @CodSector
+															 AND de.CODIGOZONA_NEW			= @idZona_NEW
+															 AND de.CODIGOCAMARONERA_NEW    = @CodCamaronera_NEW
+															 AND de.CODIGOSECTOR_NEW        = @CodSector_NEW)
 
+						UPDATE proSecuencial 
+						SET @ultimaSecuenciaDetalleParametros   = ultimaSecuencia,
+							ultimaSecuencia						= ultimaSecuencia + @IdsNecesariosParametros  -- Valor arbitrario pero seguro
+						WHERE tabla = 'recepcionEspecieParametros'  
 						 
-					INSERT INTO proRecepcionEspecieDetalle	
-						(idRecepcionDetalle,     
-						idRecepcion,          
-						idPiscinaPlanificacion,    orden,              idPiscina,
-						rolPiscina,              cantidad,             unidadMedida,              cantidadRecibida,   cantidadAdicional,
-						idPiscinaEjecucion,      idCodigoGenetico,     idLaboratorioMaduracion,   codigoLarva,        biomasa,
-						oxigeno,                 salinidad,            temperatura,               costoLarva,         costoServiciosPrestados,
-						costoFlete,              amonio,               ph,                        alcalinidad,        conteoAlgas,
-						descripcion,             numeroCajas,          numeroTinas,               tanqueOrigen,       plGramoLab,
-						plGramoCam,              numeroArtemia,        calidadAgua,               tanqueCalidadAguaBuena, tanqueCalidadAguaRegular,
-						tanqueCalidadAguaMala,   observacionParametro, observacionCaracteristica, activo,                  idMotivoAuditoria,
-						usuarioCreacion,         estacionCreacion,     fechaHoraCreacion,         usuarioModificacion,     estacionModificacion,
-						fechaHoraModificacion,   origenPlGramo)
+						 	INSERT INTO proRecepcionEspecieParametros
+					    (   idRecepcionParametro,       
+							idRecepcion,			    idRecepcionDetalle,       
+							orden,                      idParametroControl,
+							valorEnPreparacion,         valorTinaPromedio,         valorPSInicio,            valorPSFin,              idCualidadEnPreparacion,
+							idCualidadTinaPromedio,     idCualidadPSInicio,        idCualidadPSFin,          activo,                  usuarioCreacion,
+							estacionCreacion,           fechaHoraCreacion,         usuarioModificacion,      estacionModificacion,    fechaHoraModificacion)
 					SELECT 
-						ROW_NUMBER() OVER (ORDER BY D.idRecepcionDetalle) + @ultimaSecuenciaDetalle,  
-						@ultimaSecuenciaCabecera, 
-						idPiscinaPlanificacion,   orden,              D.idPiscina,
-						rolPiscina,              cantidad,             unidadMedida,              cantidadRecibida,			cantidadAdicional,
-						idPiscinaEjecucion,      idCodigoGenetico,     idLaboratorioMaduracion,   codigoLarva,				biomasa,
-						oxigeno,                 salinidad,            temperatura,               costoLarva,				costoServiciosPrestados,
-						costoFlete,              amonio,               ph,                        alcalinidad,				conteoAlgas,
-						descripcion,             numeroCajas,          numeroTinas,               tanqueOrigen,				plGramoLab,
-						plGramoCam,              numeroArtemia,        calidadAgua,               tanqueCalidadAguaBuena,   tanqueCalidadAguaRegular,
-						tanqueCalidadAguaMala,   observacionParametro, observacionCaracteristica, activo,                   idMotivoAuditoria,
-						usuarioCreacion,         estacionCreacion,     fechaHoraCreacion,         usuarioModificacion,      @tipoMigracion,
-						fechaHoraModificacion,   origenPlGramo
-					FROM proRecepcionEspecieDetalle D INNER JOIN #detRecepcionItem DT ON D.idRecepcion =DT.idRecepcion AND D.idPiscina = DT.idPiscina AND D.idRecepcionDetalle = DT.idRecepcionDetalle 
-					WHERE D.idRecepcion = @idRecepcion
+						ROW_NUMBER() OVER (ORDER BY AP.idRecepcionParametro) +@ultimaSecuenciaDetalleParametros,    
+							@ultimaSecuenciaCabecera,       de.idRecepcionDetalleNuevo,       
+							orden,                      idParametroControl,
+							valorEnPreparacion,         valorTinaPromedio,         valorPSInicio,            valorPSFin,      idCualidadEnPreparacion,
+							idCualidadTinaPromedio,     idCualidadPSInicio,        idCualidadPSFin,          activo,          usuarioCreacion,
+							estacionCreacion,           fechaHoraCreacion,         usuarioModificacion,      @Modifica,		  fechaHoraModificacion
+					FROM proRecepcionEspecieParametros  ap 
+					INNER JOIN #idsControlDetalle de 
+				    ON ap.idRecepcionDetalle    = de.idRecepcionDetalle
+				        WHERE de.idRecepcion        = @idRecepcion
+						AND de.zona                 = @idZona
+					    AND de.camaronera           = @CodCamaronera
+					    AND de.sector               = @CodSector
+						AND de.CODIGOZONA_NEW		= @idZona_NEW
+					    AND de.CODIGOCAMARONERA_NEW = @CodCamaronera_NEW
+					    AND de.CODIGOSECTOR_NEW		= @CodSector_NEW
+					
+					--inactivo los detalle antiguo migrado a la nueva transaccion
+					UPDATE  d SET activo               = 0,
+					              estacionModificacion = @Modifica+'_ANU'
+					FROM  proRecepcionEspecieParametros d 
+					INNER JOIN #idsControlDetalle de 
+				    ON d.idRecepcion    = de.idRecepcion
+					AND d.idRecepcionDetalle = de.idRecepcionDetalle
+				    WHERE d.idRecepcion				= @idRecepcion
+					AND de.zona						= @idZona
+					AND de.camaronera				= @CodCamaronera
+					AND de.sector					= @CodSector
+					AND de.CODIGOZONA_NEW			= @idZona_NEW
+					AND de.CODIGOCAMARONERA_NEW		= @CodCamaronera_NEW
+					AND de.CODIGOSECTOR_NEW			= @CodSector_NEW
 
-						;WITH CTE AS (
-							SELECT 
-								DT.idRecepcionDetalle,
-								@ultimaSecuenciaCabecera as idRecepcionNuevo,
-								ROW_NUMBER() OVER (ORDER BY D.idRecepcionDetalle) + @ultimaSecuenciaDetalle AS idRecepcionDetalleNuevo
-							FROM proRecepcionEspecieDetalle D 
-							INNER JOIN #detRecepcionItem DT ON D.idRecepcion = DT.idRecepcion 
-															AND D.idPiscina = DT.idPiscina 
-															AND D.idRecepcionDetalle = DT.idRecepcionDetalle
-							WHERE D.idRecepcion = @idRecepcion
-						)
-						UPDATE DT
-						SET DT.idRecepcionDetalleNuevo = CTE.idRecepcionDetalleNuevo,
-							DT.idRecepcionNuevo		   = CTE.idRecepcionNuevo
-						FROM #detRecepcionItem DT
-						INNER JOIN CTE ON DT.idRecepcionDetalle = CTE.idRecepcionDetalle
-								WHERE Dt.idRecepcion = @idRecepcion
+							    --SUBDETALLE DE CARACTERISTICA
+						DECLARE @IdsNecesariosCaracteristicas INT =0;
+						SELECT  @IdsNecesariosCaracteristicas =  (SELECT COUNT(1)
+															 FROM proRecepcionEspecieCaracteristica 	ap		
+															 INNER JOIN #idsControlDetalle          de 
+															 ON ap.idRecepcionDetalle    = de.idRecepcionDetalle
+															 WHERE de.idRecepcion        = @idRecepcion
+															 AND de.zona                 = @idZona
+															 AND de.camaronera           = @CodCamaronera
+															 AND de.sector               = @CodSector
+															 AND de.CODIGOZONA_NEW			= @idZona_NEW
+															 AND de.CODIGOCAMARONERA_NEW    = @CodCamaronera_NEW
+															 AND de.CODIGOSECTOR_NEW        = @CodSector_NEW)
+
+						UPDATE proSecuencial 
+						SET @ultimaSecuenciaDetalleCaracteristicas   = ultimaSecuencia,
+							ultimaSecuencia						= ultimaSecuencia + @IdsNecesariosCaracteristicas  -- Valor arbitrario pero seguro
+						WHERE tabla = 'recepcionEspecieCaracteristica'  
 
 					INSERT INTO proRecepcionEspecieCaracteristica
 					    (idRecepcionCaracteristica,    
@@ -240,62 +425,48 @@
 						 usuarioCreacion,              estacionCreacion,          fechaHoraCreacion,        usuarioModificacion,      estacionModificacion,
 						 fechaHoraModificacion)
 					SELECT 
-						ROW_NUMBER() OVER (ORDER BY D.idRecepcionCaracteristica) +@ultimaSecuenciaDetalleCaracteristicas,    
-						@ultimaSecuenciaCabecera,     dt.idRecepcionDetalleNuevo,       
+						ROW_NUMBER() OVER (ORDER BY AP.idRecepcionCaracteristica) +@ultimaSecuenciaDetalleCaracteristicas,    
+						@ultimaSecuenciaCabecera,     DE.idRecepcionDetalleNuevo,       
 						orden,						  idParametroControl,
 						valorEnLaboratorio,           valorEnCamaronera,         idCualidadEnLaboratorio,  idCualidadEnCamaronera,   activo,
-						usuarioCreacion,              estacionCreacion,          fechaHoraCreacion,        usuarioModificacion,      @tipoMigracion,
+						usuarioCreacion,              estacionCreacion,          fechaHoraCreacion,        usuarioModificacion,      @Modifica,
 						fechaHoraModificacion
-					FROM proRecepcionEspecieCaracteristica  D INNER JOIN #detRecepcionItem DT ON D.idRecepcion =DT.idRecepcion  AND D.idRecepcionDetalle = DT.idRecepcionDetalle 
-					WHERE D.idRecepcion = @idRecepcion
-						 
-					
-					INSERT INTO proRecepcionEspecieParametros
-					    (   idRecepcionParametro,       
-							idRecepcion,			    idRecepcionDetalle,       
-							orden,                      idParametroControl,
-							valorEnPreparacion,         valorTinaPromedio,         valorPSInicio,            valorPSFin,              idCualidadEnPreparacion,
-							idCualidadTinaPromedio,     idCualidadPSInicio,        idCualidadPSFin,          activo,                  usuarioCreacion,
-							estacionCreacion,           fechaHoraCreacion,         usuarioModificacion,      estacionModificacion,    fechaHoraModificacion)
-					SELECT 
-						ROW_NUMBER() OVER (ORDER BY D.idRecepcionParametro) +@ultimaSecuenciaDetalleParametros,    
-						@ultimaSecuenciaCabecera,       dt.idRecepcionDetalleNuevo,       
-							orden,                      idParametroControl,
-							valorEnPreparacion,         valorTinaPromedio,         valorPSInicio,            valorPSFin,              idCualidadEnPreparacion,
-							idCualidadTinaPromedio,     idCualidadPSInicio,        idCualidadPSFin,          activo,                  usuarioCreacion,
-							estacionCreacion,           fechaHoraCreacion,         usuarioModificacion,      @tipoMigracion,		fechaHoraModificacion
-					FROM proRecepcionEspecieParametros  D INNER JOIN #detRecepcionItem DT ON D.idRecepcion =DT.idRecepcion  AND D.idRecepcionDetalle = DT.idRecepcionDetalle 
-					WHERE D.idRecepcion = @idRecepcion
-
+					FROM proRecepcionEspecieCaracteristica  AP 
+					INNER JOIN #idsControlDetalle de 
+				    ON ap.idRecepcionDetalle    = de.idRecepcionDetalle
+				        WHERE de.idRecepcion        = @idRecepcion
+						AND de.zona                 = @idZona
+					    AND de.camaronera           = @CodCamaronera
+					    AND de.sector               = @CodSector
+						AND de.CODIGOZONA_NEW		= @idZona_NEW
+					    AND de.CODIGOCAMARONERA_NEW = @CodCamaronera_NEW
+					    AND de.CODIGOSECTOR_NEW		= @CodSector_NEW 
+				
+					 			--inactivo los detalle antiguo migrado a la nueva transaccion
+					UPDATE  d SET activo               = 0,
+					              estacionModificacion = @Modifica+'_ANU'
+					FROM  proRecepcionEspecieCaracteristica d 
+					INNER JOIN #idsControlDetalle de 
+				    ON d.idRecepcion    = de.idRecepcion
+					AND d.idRecepcionDetalle = de.idRecepcionDetalle
+				    WHERE d.idRecepcion				= @idRecepcion
+					AND de.zona						= @idZona
+					AND de.camaronera				= @CodCamaronera
+					AND de.sector					= @CodSector
+					AND de.CODIGOZONA_NEW			= @idZona_NEW
+					AND de.CODIGOCAMARONERA_NEW		= @CodCamaronera_NEW
+					AND de.CODIGOSECTOR_NEW			= @CodSector_NEW
 				  END
 
 
-			    UPDATE #cabRecepcionItem SET procesado = 1, tipoMigracion = @tipoMigracion WHERE  idRecepcion        = @idRecepcion      and  procesado           = 0  
-	      END
-		  IF(@mostrarResultados = 1)
-		  BEGIN
-	 	   select D.*, C.procesado, c.tipoMigracion from #detRecepcionItem D INNER JOIN #cabRecepcionItem C ON C.idRecepcion = D.idRecepcion 
-		   ORDER BY C.idRecepcion
+			           UPDATE #cabRecepcionItem SET procesado = 1 WHERE idRecepcion  = @idRecepcion		    AND 
+															  procesado			  = 0  
+														 AND zona                 = @idZona
+					                                     AND camaronera           = @CodCamaronera
+					                                     AND sector               = @CodSector
+														 AND CODIGOZONA_NEW		  = @idZona_NEW
+														 AND CODIGOCAMARONERA_NEW = @CodCamaronera_NEW
+														 AND CODIGOSECTOR_NEW	   = @CodSector_NEW
 
-	       select COUNT(1) registrosAfectado, 'proRecepcionEspecie' as tabla from proRecepcionEspecie
-						where estacionModificacion IN ('MIGRACION','UMIGRACION')
-	       union select COUNT(1) registrosAfectado, 'proRecepcionEspecieSecuencial' as tabla from proRecepcionEspecieSecuencial      
-						where estacionModificacion ='MIGRACION'
-	       union select COUNT(1) registrosAfectado, 'proRecepcionEspecieDetalle' as tabla from proRecepcionEspecieDetalle
-						where estacionModificacion ='MIGRACION'
-	       union select COUNT(1) registrosAfectado, 'proRecepcionEspecieCaracteristica' as tabla from proRecepcionEspecieCaracteristica  
-							where estacionModificacion ='MIGRACION'
-	       union select COUNT(1) registrosAfectado, 'proRecepcionEspecieParametros' as tabla from proRecepcionEspecieParametros      
-							where estacionModificacion ='MIGRACION'		
-		   
-		   select max(idRecepcion)           idTabla, (select top 1 ultimaSecuencia from proSecuencial where tabla ='recepcionEspecie')           secuencial ,'recepcionEspecie'           as tabla from proRecepcionEspecie			 
-	       union select max(idRecepcionSecuencial) idTabla, (select top 1 ultimaSecuencia from proSecuencial where tabla ='recepcionEspecieSecuencial') secuencial ,'recepcionEspecieSecuencial' as tabla from proRecepcionEspecieSecuencial  
-	       union select max(idRecepcionDetalle)    idTabla, (select top 1 ultimaSecuencia from proSecuencial where tabla ='recepcionEspecieDetalle')    secuencial ,'recepcionEspecieDetalle'    as tabla from proRecepcionEspecieDetalle         where estacionModificacion ='MIGRACION'
-	       union select max(idRecepcionCaracteristica)  idTabla,
-		       (select top 1 ultimaSecuencia from proSecuencial where tabla ='recepcionEspecieCaracteristica')    secuencial ,'recepcionEspecieCaracteristica'    as tabla 
-		   from proRecepcionEspecieCaracteristica  where estacionModificacion ='MIGRACION' 
-		   union select max(idRecepcionParametro)       idTabla,
-		       (select top 1 ultimaSecuencia from proSecuencial where tabla ='recepcionEspecieParametros')    secuencial ,'recepcionEspecieParametros'    as tabla 
-		   from proRecepcionEspecieParametros  where estacionModificacion ='MIGRACION'
-		 END
+	      END 
 END
