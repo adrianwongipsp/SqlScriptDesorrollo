@@ -1,19 +1,22 @@
-
---CREATE PROCEDURE SP_MIGRACION_PISCINA_CONTROL_MUESTREO
---AS
---BEGIN
-BEGIN TRAN
+ 
+alter PROCEDURE [dbo].[SP_MIGRACION_PISCINA_CONTROL_MUESTREO]
+AS
+BEGIN
+--BEGIN TRAN
 		 DROP TABLE IF EXISTS #idsControlDetalle
 		 DROP TABLE IF EXISTS #idsControl
 		 
 		   /*PROCESO  DE MUESTREOS DE PESOS */
           DECLARE @id INT = 0,
 		  @idZona CHAR(3) = '',
-   @CodCamaronera CHAR(5) = '',
-       @CodSector CHAR(5) = '',
-		       @Count INT = 0,
-		      @Count1 INT = 0,
-    @Modifica varchar(75) = 'MIGRACION_PISCINA_20250505';
+          @CodCamaronera CHAR(5) = '',
+          @CodSector CHAR(5)     = '',
+		  @Count INT  = 0,
+		  @Count1 INT = 0,
+		  @Modifica varchar(75) = 'MIGRACION_PISCINA_20250505',
+		  @idZona_NEW  CHAR(3)   = '',
+          @CodCamaronera_NEW  CHAR(5) = '',
+          @CodSector_NEW  CHAR(5)     = '';
 
 		  SELECT DISTINCT  
 		           de.idMuestreo
@@ -42,6 +45,9 @@ BEGIN TRAN
 				  ,camaronera
 				  ,sector
 		          ,0 procesado
+				  ,CODIGOZONA_NEW
+				  ,CODIGOCAMARONERA_NEW
+				  ,CODIGOSECTOR_NEW
 		  INTO #idsControl
 		  FROM #idsControlDetalle
 
@@ -50,10 +56,13 @@ BEGIN TRAN
 		  WHILE EXISTS(SELECT TOP 1 1 FROM #idsControl WHERE procesado = 0)
 		  BEGIN
 				SELECT TOP 1	
-				     @id = idMuestreo,
-				 @idZona = zona,
-		  @CodCamaronera = camaronera,
-			  @CodSector = sector
+				   @id                = idMuestreo,
+				   @idZona            = zona,
+		           @CodCamaronera     = camaronera,
+			       @CodSector         = sector,
+			  	   @idZona_NEW        = CODIGOZONA_NEW,
+				   @CodCamaronera_NEW =	CODIGOCAMARONERA_NEW,
+				   @CodSector_NEW	  =	CODIGOSECTOR_NEW
 		        FROM #idsControl 
 				WHERE procesado=0
 				order by idMuestreo
@@ -71,6 +80,9 @@ BEGIN TRAN
 				AND de.zona         = @idZona
 				AND de.camaronera   = @CodCamaronera
 				AND de.sector       = @CodSector
+				AND de.CODIGOZONA_NEW        = @idZona_NEW
+				AND de.CODIGOCAMARONERA_NEW  = @CodCamaronera_NEW
+				AND de.CODIGOSECTOR_NEW      = @CodSector_NEW
 
 				IF(@Count = @Count1)--si la transaccion es un solo detalle con una sola piscina distinta , basta con actualizar la cabecera
 				BEGIN
@@ -96,6 +108,9 @@ BEGIN TRAN
 				   	AND A.zona                   = @idZona
 					AND A.camaronera             = @CodCamaronera
 					AND A.sector                 = @CodSector
+					AND mp.CODIGOZONA_NEW        = @idZona_NEW
+				    AND mp.CODIGOCAMARONERA_NEW  = @CodCamaronera_NEW
+				    AND mp.CODIGOSECTOR_NEW      = @CodSector_NEW
 				END
 
 				  IF(@Count != @Count1)--si la transaccion es mas detalle , crear la cabecera con los nuevos campos , crear el detalle con el item a migrar y en el antiguo detalle los desactivamos
@@ -112,10 +127,13 @@ BEGIN TRAN
 				                                      ON ap.idMuestreo            = de.idMuestreo
 													     AND ap.idMuestreoDetalle = de.idMuestreoDetalle
 				                                         AND ap.idPiscina         = de.idPiscina
-				                                      WHERE ap.idMuestreo         = @id
-													  AND zona                    = @idZona
-					                                  AND camaronera              = @CodCamaronera
-					                                  AND sector                  = @CodSector)
+				                                      WHERE ap.idMuestreo          = @id
+													  AND zona                     = @idZona
+					                                  AND camaronera               = @CodCamaronera
+					                                  AND sector                   = @CodSector
+													  AND de.CODIGOZONA_NEW        = @idZona_NEW
+													  AND de.CODIGOCAMARONERA_NEW  = @CodCamaronera_NEW
+													  AND de.CODIGOSECTOR_NEW      = @CodSector_NEW)
 
 						UPDATE proSecuencial 
 						SET    @ultimaSecuenciaDetalle  = ultimaSecuencia,
@@ -187,9 +205,9 @@ BEGIN TRAN
 						AND a.zona                  = @idZona
 					    AND a.camaronera            = @CodCamaronera
 					    AND a.sector                = @CodSector
-
-
-							               
+						AND mp.CODIGOZONA_NEW        = @idZona_NEW
+				        AND mp.CODIGOCAMARONERA_NEW  = @CodCamaronera_NEW
+				        AND mp.CODIGOSECTOR_NEW      = @CodSector_NEW
 
 						INSERT INTO [dbo].[proMuestreoPesoDetalle]
 								   ([idMuestreoDetalle]
@@ -245,33 +263,27 @@ BEGIN TRAN
 						AND zona                 = @idZona
 					    AND camaronera           = @CodCamaronera
 					    AND sector               = @CodSector
-			
+						AND de.CODIGOZONA_NEW        = @idZona_NEW
+				        AND de.CODIGOCAMARONERA_NEW  = @CodCamaronera_NEW
+				        AND de.CODIGOSECTOR_NEW      = @CodSector_NEW
 
 					             
-			
-
 					--inactivo los detalle antiguo migrado a la nueva transaccion
-					UPDATE  d SET activo               = 0, 
-					              estacionModificacion = @Modifica+'_ANU'
-					FROM  proMuestreoPesoDetalle d 
-					INNER JOIN #idsControlDetalle de 
-				    ON d.idMuestreo         = de.idMuestreo
-					AND d.idMuestreoDetalle = de.idMuestreoDetalle
-				    AND d.idPiscina         = de.idPiscina
-				    WHERE d.idMuestreo = @id
-					AND zona           = @idZona
-					AND camaronera     = @CodCamaronera
-					AND sector         = @CodSector
+						UPDATE  d SET activo               = 0, 
+									  estacionModificacion = @Modifica+'_ANU'
+						FROM  proMuestreoPesoDetalle d 
+						INNER JOIN #idsControlDetalle de 
+						ON d.idMuestreo         = de.idMuestreo
+						AND d.idMuestreoDetalle = de.idMuestreoDetalle
+						AND d.idPiscina         = de.idPiscina
+						WHERE d.idMuestreo = @id
+						AND zona           = @idZona
+						AND camaronera     = @CodCamaronera
+						AND sector         = @CodSector
+						AND de.CODIGOZONA_NEW        = @idZona_NEW
+				        AND de.CODIGOCAMARONERA_NEW  = @CodCamaronera_NEW
+				        AND de.CODIGOSECTOR_NEW      = @CodSector_NEW
 
-				--if(@id=1284)
-				--begin
-				--				SELECT *
-				--FROM  proMuestreoPesoDetalle ap 
-				--WHERE ap.idMuestreo =@ultimaSecuenciaCabecera
-				--end
-
-
-					
 					UPDATE d
 					SET d.idDetActual=(SELECT idMuestreoDetalle
 					                   FROM  proMuestreoPesoDetalle de WITH (NOLOCK) 
@@ -283,28 +295,28 @@ BEGIN TRAN
 					AND zona           = @idZona
 					AND camaronera     = @CodCamaronera
 					AND sector         = @CodSector
-
-			 --   if(@id=1284)
-				--begin
-				--				SELECT *
-				--FROM  proMuestreoPesoDetalle ap 
-				--WHERE ap.idMuestreo =@ultimaSecuenciaCabecera
-				--end
-
+					AND d.CODIGOZONA_NEW        = @idZona_NEW
+				    AND d.CODIGOCAMARONERA_NEW  = @CodCamaronera_NEW
+				    AND d.CODIGOSECTOR_NEW      = @CodSector_NEW
+					
+				IF(EXISTS(SELECT TOP 1 1 FROM proMuestreoPeso WHERE idMuestreo  = @id AND tipoMuestreo='PLONG'))
+				BEGIN
                 	DECLARE @IdsLong INT = (SELECT COUNT(1)
 						                     FROM proMuestreoPesoLongitudDetalle 	ap		
 						                     INNER JOIN #idsControlDetalle de 
 				                             ON ap.idMuestreoDetalle  = de.idMuestreoDetalle
-				                             WHERE de.idMuestreo      = @id
-											 AND zona           = @idZona
-					                         AND camaronera     = @CodCamaronera
-					                         AND sector         = @CodSector), @ultimaSecuenciaL INT=0;
+				                             WHERE de.idMuestreo          = @id
+											 AND zona					  = @idZona
+					                         AND camaronera				  = @CodCamaronera
+					                         AND sector					  = @CodSector
+											 AND de.CODIGOZONA_NEW        = @idZona_NEW
+											 AND de.CODIGOCAMARONERA_NEW  = @CodCamaronera_NEW
+											 AND de.CODIGOSECTOR_NEW      = @CodSector_NEW), @ultimaSecuenciaL INT=0;
 
 					UPDATE proSecuencial 
 					SET @ultimaSecuenciaL = ultimaSecuencia,
 						ultimaSecuencia	  = ultimaSecuencia + @IdsLong  -- Valor arbitrario pero seguro
 					WHERE tabla = 'MuestreoPesoLongitudDetalle'
-
 
 					
 					INSERT INTO [dbo].[proMuestreoPesoLongitudDetalle]
@@ -345,6 +357,9 @@ BEGIN TRAN
 						AND zona                   = @idZona
 					    AND camaronera             = @CodCamaronera
 					    AND sector                 = @CodSector
+					    AND de.CODIGOZONA_NEW        = @idZona_NEW
+				        AND de.CODIGOCAMARONERA_NEW  = @CodCamaronera_NEW
+				        AND de.CODIGOSECTOR_NEW      = @CodSector_NEW
 
 					UPDATE  d SET activo               = 0, 
 					              estacionModificacion = @Modifica+'_ANU'
@@ -352,8 +367,15 @@ BEGIN TRAN
 					INNER JOIN #idsControlDetalle de 
 				    ON d.idMuestreoDetalle = de.idMuestreoDetalle
 				    WHERE de.idMuestreo    = @id
-
-
+					AND zona               = @idZona
+					AND camaronera         = @CodCamaronera
+					AND sector             = @CodSector
+				    AND de.CODIGOZONA_NEW        = @idZona_NEW
+				    AND de.CODIGOCAMARONERA_NEW  = @CodCamaronera_NEW
+				    AND de.CODIGOSECTOR_NEW      = @CodSector_NEW
+			  END 
+			  ELSE
+			  BEGIN
                 	DECLARE @IdsTalla INT = (SELECT COUNT(1)
 						                     FROM proMuestreoPesoTallaDetalle 	ap		
 						                     INNER JOIN #idsControlDetalle de 
@@ -361,50 +383,54 @@ BEGIN TRAN
 				                             WHERE de.idMuestreo     = @id
 											 AND zona           = @idZona
 					                         AND camaronera     = @CodCamaronera
-					                         AND sector         = @CodSector), @ultimaSecuenciaT INT=0;
+					                         AND sector         = @CodSector
+											 AND de.CODIGOZONA_NEW        = @idZona_NEW
+											 AND de.CODIGOCAMARONERA_NEW  = @CodCamaronera_NEW
+											 AND de.CODIGOSECTOR_NEW      = @CodSector_NEW), @ultimaSecuenciaT INT=0;
 
 					UPDATE proSecuencial 
 					SET @ultimaSecuenciaT = ultimaSecuencia,
 						ultimaSecuencia	  = ultimaSecuencia + @IdsTalla  -- Valor arbitrario pero seguro
 					WHERE tabla           = 'MuestreoPesoTallaDetalle'
 
-
 					
-					
-						INSERT INTO [dbo].[proMuestreoPesoTallaDetalle]
-								   ([idMuestreoTallaDetalle]
-								   ,[idMuestreoDetalle]
-								   ,[orden]
-								   ,[talla]
-								   ,[cantidadMuestra]
-								   ,[pesoGramos]
-								   ,[activo]
-								   ,[usuarioCreacion]
-								   ,[estacionCreacion]
-								   ,[fechaHoraCreacion]
-								   ,[usuarioModificacion]
-								   ,[estacionModificacion]
-								   ,[fechaHoraModificacion])
-		              SELECT   (ROW_NUMBER() OVER(ORDER BY ap.idMuestreoTallaDetalle)  + @ultimaSecuenciaT) 
-								  ,de.idDetActual
-								  ,orden
-								  ,talla
-								  ,cantidadMuestra
-								  ,pesoGramos
-								  ,activo
-								  ,usuarioCreacion
-								  ,estacionCreacion
-								  ,fechaHoraCreacion
-								  ,usuarioModificacion
-								  ,@Modifica+'_CRE'
-								  ,fechaHoraModificacion
-						FROM    proMuestreoPesoTallaDetalle ap		
-						INNER JOIN #idsControlDetalle de 
-				        ON ap.idMuestreoDetalle    = de.idMuestreoDetalle
-				        WHERE de.idMuestreo        = @id
-						AND zona           = @idZona
-					    AND camaronera     = @CodCamaronera
-					     AND sector         = @CodSector
+					INSERT INTO [dbo].[proMuestreoPesoTallaDetalle]
+								([idMuestreoTallaDetalle]
+								,[idMuestreoDetalle]
+								,[orden]
+								,[talla]
+								,[cantidadMuestra]
+								,[pesoGramos]
+								,[activo]
+								,[usuarioCreacion]
+								,[estacionCreacion]
+								,[fechaHoraCreacion]
+								,[usuarioModificacion]
+								,[estacionModificacion]
+								,[fechaHoraModificacion])
+		            SELECT   (ROW_NUMBER() OVER(ORDER BY ap.idMuestreoTallaDetalle)  + @ultimaSecuenciaT) 
+								,de.idDetActual
+								,orden
+								,talla
+								,cantidadMuestra
+								,pesoGramos
+								,activo
+								,usuarioCreacion
+								,estacionCreacion
+								,fechaHoraCreacion
+								,usuarioModificacion
+								,@Modifica+'_CRE'
+								,fechaHoraModificacion
+					FROM    proMuestreoPesoTallaDetalle ap		
+					INNER JOIN #idsControlDetalle de 
+				    ON ap.idMuestreoDetalle    = de.idMuestreoDetalle
+				    WHERE de.idMuestreo        = @id
+					AND zona           = @idZona
+					AND camaronera     = @CodCamaronera
+					AND sector         = @CodSector
+				    AND de.CODIGOZONA_NEW        = @idZona_NEW
+				    AND de.CODIGOCAMARONERA_NEW  = @CodCamaronera_NEW
+				    AND de.CODIGOSECTOR_NEW      = @CodSector_NEW
 
 					UPDATE  d SET activo               = 0,
 					              estacionModificacion = @Modifica+'_ANU'
@@ -415,16 +441,22 @@ BEGIN TRAN
 					AND zona           = @idZona
 					AND camaronera     = @CodCamaronera
 					AND sector         = @CodSector
-
-				   END
+					AND de.CODIGOZONA_NEW        = @idZona_NEW
+				    AND de.CODIGOCAMARONERA_NEW  = @CodCamaronera_NEW
+				    AND de.CODIGOSECTOR_NEW      = @CodSector_NEW
+			  END
+             END
 			
 			       UPDATE #idsControl SET procesado = 1 WHERE idMuestreo = @id	AND 
 															  procesado	 = 0
 															  AND zona           = @idZona
 					                                          AND camaronera     = @CodCamaronera
-					                                         AND sector         = @CodSector
+					                                          AND sector         = @CodSector
+															  AND  CODIGOZONA_NEW        = @idZona_NEW
+															  AND  CODIGOCAMARONERA_NEW  = @CodCamaronera_NEW
+															  AND  CODIGOSECTOR_NEW      = @CodSector_NEW
 
 
 		END
-ROLLBACK TRAN
---END
+--ROLLBACK TRAN
+END 
