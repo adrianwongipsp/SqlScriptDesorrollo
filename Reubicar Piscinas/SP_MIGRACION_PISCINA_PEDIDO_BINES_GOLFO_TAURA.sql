@@ -10,7 +10,7 @@ BEGIN
 		          @Count1 INT = 0,
 			      @idZona      CHAR(3)  = '',
 				  @idZona_NEW  CHAR(3)  = '',
-				  @Modifica VARCHAR(75) = 'MIGRACION_20250505_ZONA';
+				  @Modifica VARCHAR(75) = 'MIGRACION_PISCINA_20250505';
 		
 		--Procesamiento en bloques para evitar ciclos extensos
 		CREATE TABLE #idsPedido (idPedidoBin INT, codigoZona CHAR(5), procesado bit, CODIGOZONA_NEW CHAR(5));
@@ -36,7 +36,7 @@ BEGIN
 			SELECT distinct idPedidoBin, codigoZona, 0, CODIGOZONA_NEW
 			FROM #idsPedidoDetalle
 
-		  SELECT COUNT(1) AS PEDIDOS_INICIALES FROM #idsPedido
+		  --SELECT COUNT(1) AS PEDIDOS_INICIALES FROM #idsPedido
 		  --SELECT * FROM  #idsPedidoDetalle
 		  WHILE EXISTS(SELECT TOP 1 1 FROM #idsPedido where procesado = 0)
 		  BEGIN
@@ -45,7 +45,7 @@ BEGIN
 					 @idZona     = codigoZona,
 					 @idZona_NEW = CODIGOZONA_NEW
 		        FROM #idsPedido 
-				WHERE procesado = 0
+				WHERE procesado  = 0
 				ORDER BY idPedidoBin
 
 				SELECT @Count1        =  COUNT(DISTINCT ap.idPiscina) 
@@ -73,7 +73,6 @@ BEGIN
 				   FROM    proPedidoBin A
 				   inner join #idsPedidoDetalle mp
 				   ON    A.idPedidoBin       = mp.idPedidoBin
-				     AND A.zona              = MP.codigoZona
 			       WHERE  mp.idPedidoBin     = @id
 				   AND    mp.codigoZona      = @idZona
 				   AND    mp.CODIGOZONA_NEW  = @idZona_NEW
@@ -131,7 +130,7 @@ BEGIN
 	                SELECT TOP 1  @ultimaSecuenciaCabecera 
 								,empresa
 								,division
-								,d.CODIGOZONA_NEW 
+								,mp.CODIGOZONA_NEW 
 								,fechaPedido
 								,idEspecie
 								,idTipoIngreso
@@ -142,19 +141,17 @@ BEGIN
 								,idMotivoAuditoria
 								,estado
 								,usuarioCreacion
-								,@Modifica
+								,estacionCreacion
 								,fechaHoraCreacion
 								,usuarioModificacion
-								,@Modifica
+								,@Modifica+'_CRE'
 								,fechaHoraModificacion
 						FROM 	proPedidoBin A
 						 INNER JOIN #idsPedidoDetalle mp 
-						  ON  A.idPedidoBin  = mp.idPedidoBin
-						 INNER JOIN tempMigracionPiscina d
-						  ON  mp.idPiscina   = d.IDPISCINA
-						WHERE A.idPedidoBin  = @id
-						  AND mp.codigoZona  = @idZona
-						  AND mp.CODIGOZONA_NEW  = @idZona_NEW
+						  ON  A.idPedidoBin     = mp.idPedidoBin
+						WHERE mp.idPedidoBin    = @id
+						  AND mp.codigoZona     = @idZona
+						  AND mp.CODIGOZONA_NEW = @idZona_NEW
 
 
 					INSERT INTO [dbo].[proPedidoBinDetalle]
@@ -201,28 +198,34 @@ BEGIN
 								  ,estacionCreacion
 								  ,fechaHoraCreacion
 								  ,usuarioModificacion
-								  ,@Modifica
+								  ,@Modifica +'_CRE'
 								  ,fechaHoraModificacion
 								  ,numeroTinas
 						FROM    proPedidoBinDetalle ap		
 						INNER JOIN #idsPedidoDetalle de 
 				                   ON ap.idPedidoBin   = de.idPedidoBin
+						   AND ap.idPedidoBinDetalle   = de.idPedidoBinDetalle
 								   AND ap.idPiscina    = de.idPiscina
-				        WHERE ap.idPedidoBin           = @id
+				        WHERE de.idPedidoBin           = @id
 						AND de.codigoZona              = @idZona
 						AND de.CODIGOZONA_NEW          = @idZona_NEW
 			
 
 					--inactivo los detalle antiguo migrado a la nueva transaccion
-					UPDATE  d SET activo               = 0, 
-					              estacionModificacion = @Modifica
+					UPDATE  d SET activo  = 0, 
+					 estacionModificacion = @Modifica+'_ANU'
 					FROM  proPedidoBinDetalle d 
 					INNER JOIN #idsPedidoDetalle de 
-				    ON d.idPedidoBin    = de.idPedidoBin
-				    AND d.idPiscina     = de.idPiscina	
-				    WHERE d.idPedidoBin = @id
-					AND de.codigoZona   = @idZona
+				    ON d.idPedidoBin      = de.idPedidoBin
+				    AND d.idPiscina       = de.idPiscina	
+				    WHERE d.idPedidoBin   = @id
+					AND de.codigoZona     = @idZona
 					AND de.CODIGOZONA_NEW = @idZona_NEW
+
+				   UPDATE A SET     
+				   a.estacionModificacion = @Modifica +'_MODCAB'
+				   FROM   proPedidoBin A 
+			       WHERE  idPedidoBin     = @id
 
 					
 					UPDATE d
@@ -238,7 +241,7 @@ BEGIN
 
 
 					UPDATE  d SET idPedidoBinDetalle   = de.idDetActual,
-					              estacionModificacion = @Modifica
+					              estacionModificacion = @Modifica+'_MOD'
 					FROM  proPedidoCosecha d 
 					INNER JOIN #idsPedidoDetalle de 
 				    ON d.idPedidoBinDetalle = de.idPedidoBinDetalle
@@ -252,10 +255,10 @@ BEGIN
 					 update  proPedidoBin set estado ='ANU', estacionModificacion=@Modifica + '_ANU' WHERE idPedidoBin = @id
 				   END
 
-			UPDATE #idsPedido SET procesado = 1 WHERE idPedidoBin         = @id	AND 
-								  					  procesado	          = 0  
-								  					  AND codigoZona      = @idZona
-													  AND CODIGOZONA_NEW  = @idZona_NEW
+					UPDATE #idsPedido SET procesado = 1 WHERE idPedidoBin         = @id	AND 
+								  							  procesado	          = 0  
+								  							  AND codigoZona      = @idZona
+															  AND CODIGOZONA_NEW  = @idZona_NEW
 
 
 		END
