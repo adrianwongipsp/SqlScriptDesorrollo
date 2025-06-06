@@ -49,14 +49,11 @@ SELECT
     zo.Sector AS SectorOrigen,       
     pis.nombre AS PiscinaOrigen,       
     pej.ciclo AS CicloOrigen,     
-    ec.nombre AS RolOrigen,      
-    CASE pej.Estado
-        WHEN 'INI' THEN 'INICIADO'
-        WHEN 'EJE' THEN 'EJECUCIÓN'
-        WHEN 'PRE' THEN 'PRECERRADO'
-        WHEN 'CER' THEN 'CERRADO'
-        ELSE pej.Estado
-    END AS EstadoOrigen, 
+    ec.nombre AS Rol,      
+    CASE
+        WHEN pej.Estado IN ('INI','EJE','PRE','CER') THEN 'Activo'
+        ELSE 'Inactivo'
+    END AS EstadoEjecucion, 
     pis.superficieValor AS HectareaOrigen,      
     pej.fechaSiembra,    
     pej.cantidadEntrada AS CantidadSembrada,       
@@ -72,12 +69,12 @@ SELECT
     END AS EstatusTransfrencia,
 	-- consumo balanceado (proviende de vista)
     tra.guiaTransferencia,    
-    tra.tipoTransferencia,     
+    tra.tipoTransferencia,    
     pej.idPiscinaEjecucion,    
     tra.idTransferencia,    
     tra.secuencia
 INTO #ProcesamientoInicialDatosOrigenTrans      
-FROM #zonas zo      
+FROM #zonas zo
 INNER JOIN #piscinas pis ON 
     zo.CodigoZona = pis.zona AND 
     zo.CodigoCamaronera = pis.camaronera AND 
@@ -123,13 +120,13 @@ SELECT
         WHEN 'PRE' THEN 'PRECERRADO'
         WHEN 'CER' THEN 'CERRADO'
         ELSE pej.Estado
-    END AS EstadoDestino,
-    pis.superficieValor AS HectareaDestino,    
+    END AS EstatusDestino,
+    pis.superficieValor AS HectareaDestino,
     --ec.nombre AS RolDestino,      
     trad.cantidadTransferida,    
-    trad.pesoPromedioTransferencia AS PesoTransferido,      
-    ISNULL(trad.pesoDeclaradoTransferido, 0) AS PesoReal,    
-    trad.librasDeclaradas AS LibrasTransferida,
+    trad.pesoPromedioTransferencia AS PesoTransferido,    
+    ISNULL(trad.pesoDeclaradoTransferido, 0) AS PesoReal,
+    trad.librasDeclaradas AS LibrasTransferida, --Libras Transf.
 	--Conversion alimenticia
 	COALESCE(lab.razonComercial, '') AS ProcedenciaLaboratorio,
     COALESCE(cg.nombre, '') AS Linea,
@@ -137,7 +134,7 @@ SELECT
 	--supery
 	--balanceo
 	--lb brutas
-    trad.idTransferenciaDetalle,    
+    trad.idTransferenciaDetalle,
     trad.idTransferencia,
     mtf.nombre AS TipoTransferencia
 INTO #ProcesamientoInicialDatoSDestinoTrans      
@@ -165,14 +162,14 @@ AND EXISTS (
 );
 
 -- Resultado final
-SELECT     
+SELECT
     o.FechaTransferencia, o.CodCicloOrigen,
     o.ZonaOrigen, o.SectorOrigen, o.PiscinaOrigen,     
-    o.CicloOrigen, o.RolOrigen, o.EstadoOrigen, o.HectareaOrigen, o.fechaSiembra,    
+    o.CicloOrigen, o.Rol, o.EstadoEjecucion, o.HectareaOrigen, o.fechaSiembra, 
     o.CantidadSembrada, o.Densidad, o.PesoSiembra, o.EstatusTransfrencia, 
-    o.GuiaTransferencia, d.TipoTransferencia,    
+    o.GuiaTransferencia, d.TipoTransferencia,
     d.ZonaDestino, d.CodCicloDestino, d.SectorDestino, d.PiscinaDestino, 
-    d.CicloDestino, d.HectareaDestino, 
+    d.CicloDestino, d.EstatusDestino, d.HectareaDestino,
     d.CantidadTransferida, d.PesoTransferido, d.PesoReal, d.LibrasTransferida, d.Linea, d.Maduracion, 
     (CAST(d.CantidadTransferida AS FLOAT) / o.CantidadSembrada) * 100 AS Supervivencia    
 FROM #ProcesamientoInicialDatosOrigenTrans o 

@@ -43,5 +43,5 @@ SELECT
 	pe.fechaCierre AS FechaCierre
 FROM proPiscinaEjecucion pe 
 INNER JOIN piscinas pis ON pis.idPiscina = pe.idPiscina 
-WHERE pe.activo = 1
-ORDER BY pe.idPiscina, pe.fechaInicio
+WHERE pe.activo = 1 AND pe.estado IN ('INI', 'EJE', 'PRE', 'CER')
+ORDER BY pis.Sector, pis.nombre, pe.ciclo

@@ -34,8 +34,9 @@ SELECT
     pis.zona,
     pis.camaronera,
     pis.sector
-INTO #piscinas
+	INTO #piscinas
 FROM maePiscina pis
+--INNER JOIN #zonas zo ON zo.CodigoZona = pis.zona AND zo.CodigoCamaronera = pis.camaronera AND zo.CodigoSector = pis.sector
 WHERE EXISTS (
     SELECT 1
     FROM #zonas zo
@@ -81,7 +82,17 @@ SELECT
     pej.cantidadAdicional AS CantidadAdicional,
     SUM(COALESCE(trad.cantidadDeclarada, 0)) AS CantidadReal,
     pej.idPiscinaEjecucion,
-	tra.fechaTransferencia
+	tra.fechaTransferencia,
+	ISNULL(Destinos.Destino1,'') AS Destino1,
+	ISNULL(Destinos.Destino2,'') AS Destino2,
+	ISNULL(Destinos.Destino3,'') AS Destino3,
+	ISNULL(Destinos.Destino4,'') AS Destino4,
+	ISNULL(Destinos.Destino5,'') AS Destino5,
+	ISNULL(Destinos.Destino6,'') AS Destino6,
+	ISNULL(Destinos.Destino7,'') AS Destino7,
+	ISNULL(Destinos.Destino8,'') AS Destino8,
+	tra.idTransferencia
+	,SUM(trad.numeroViajes) AS NumeroViajes
 INTO #ProcesamientoInicialDatoSiembra
 FROM #zonas zo
 INNER JOIN #piscinas pis ON zo.CodigoZona = pis.zona 
@@ -93,13 +104,38 @@ LEFT JOIN proRecepcionEspecieDetalle red ON red.idPiscinaEjecucion = pej.idPisci
 LEFT JOIN proRecepcionEspecie re ON red.idRecepcion = re.idRecepcion AND re.estado = 'APR'
 LEFT JOIN proTransferenciaEspecie tra ON tra.idPiscinaEjecucion = pej.idPiscinaEjecucion AND tra.estado = 'APR'
 LEFT JOIN proTransferenciaEspecieDetalle trad ON trad.idTransferencia = tra.idTransferencia
+LEFT JOIN (
+    SELECT
+        idTransferencia,
+        MAX(CASE WHEN rn = 1 THEN nombre ELSE NULL END) AS Destino1,
+        MAX(CASE WHEN rn = 2 THEN nombre ELSE NULL END) AS Destino2,
+        MAX(CASE WHEN rn = 3 THEN nombre ELSE NULL END) AS Destino3,
+        MAX(CASE WHEN rn = 4 THEN nombre ELSE NULL END) AS Destino4,
+        MAX(CASE WHEN rn = 5 THEN nombre ELSE NULL END) AS Destino5,
+        MAX(CASE WHEN rn = 6 THEN nombre ELSE NULL END) AS Destino6,
+        MAX(CASE WHEN rn = 7 THEN nombre ELSE NULL END) AS Destino7,
+        MAX(CASE WHEN rn = 8 THEN nombre ELSE NULL END) AS Destino8
+    FROM (
+        SELECT
+            te.idTransferencia,
+            ted.idPiscina,
+            CONCAT(s.nombre,p.nombre) as nombre,
+            ROW_NUMBER() OVER (PARTITION BY te.idTransferencia ORDER BY ted.idTransferenciaDetalle) AS rn
+        FROM proTransferenciaEspecie te
+        INNER JOIN proTransferenciaEspecieDetalle ted ON te.idTransferencia = ted.idTransferencia AND ted.activo = 1
+        INNER JOIN maePiscina p ON ted.idPiscina = p.idPiscina
+		INNER JOIN parSector s ON p.sector = s.codigo
+		WHERE te.estado = 'APR'
+    ) AS destinos
+    GROUP BY idTransferencia
+) AS Destinos ON Destinos.idTransferencia = tra.idTransferencia
 WHERE pej.estado IN ('INI', 'EJE', 'PRE', 'CER')
 GROUP BY zo.MegaZona,
     zo.Zona, zo.Camaronera, zo.Sector, pis.nombre, ec.nombre, pej.estado,
     pis.superficieValor, pis.profundidadValor, pej.fechaInicio, pej.fechaSiembra,
     pej.ciclo, pej.idPiscinaEjecucion, pej.fechaCierre,
-    pej.cantidadEntrada, pej.cantidadSalida, pej.cantidadAdicional, tra.fechaTransferencia;
-
+    pej.cantidadEntrada, pej.cantidadSalida, pej.cantidadAdicional, tra.fechaTransferencia,
+	Destino1,Destino2,Destino3,Destino4,Destino5,Destino6,Destino7,Destino8, tra.idTransferencia;
 -- ========================================
 -- PRESENTACIÓN DE DATOS
 -- ========================================
@@ -142,11 +178,19 @@ SELECT
     COALESCE(lab.razonComercial, '') AS ProcedenciaLaboratorio,
     COALESCE(cg.nombre, '') AS Linea,
     COALESCE(labm.razonComercial, '') AS Maduracion,
-	-- Destino1, Destino2, Destino3, Destino4....
-	pds.fechaTransferencia AS FechaTransferencia,
-	--CANTIDAD TANQUERO
+	Destino1,
+	Destino2,
+	Destino3,
+	Destino4,
+	Destino5,
+	Destino6,
+	Destino7,
+	Destino8,
+	pds.fechaTransferencia AS FechaTransferencia,	
+	pds.NumeroViajes, --CANTIDAD TANQUERO
     (pds.CantidadRecibida + pds.CantidadAdicional) AS CantidadConPlus,
-    pds.CantidadReal
+    pds.CantidadReal,
+	idTransferencia
 INTO #PresentacionDatoSiembra
 FROM #ProcesamientoInicialDatoSiembra pds
 LEFT JOIN maeEspecie esp ON esp.idEspecie = pds.idEspecie
