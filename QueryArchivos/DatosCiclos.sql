@@ -80,7 +80,7 @@ SELECT
     MAX(red.idLaboratorioMaduracion) AS idLaboratorioMaduracion,
     MAX(red.idCodigoGenetico) AS idCodigoGenetico,
     pej.cantidadAdicional AS CantidadAdicional,
-    SUM(COALESCE(trad.cantidadDeclarada, 0)) AS CantidadReal,
+    SUM(CAST(COALESCE(trad.cantidadDeclarada, 0) AS BIGINT)) AS CantidadReal,
     pej.idPiscinaEjecucion,
 	tra.fechaTransferencia,
 	ISNULL(Destinos.Destino1,'') AS Destino1,
