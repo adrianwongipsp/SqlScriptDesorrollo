@@ -1,16 +1,13 @@
 --TRUNCATE TABLE tmp_Recepcion_Siembra
-
-DECLARE @fecha DATE='2025-05-26', @fechaIni DATE,@fechaFin DATE;
-DECLARE      @idPiscina INT = 0,
-	       @idEjecucion INT = 0,
-       @piscina VARCHAR(20) = '',
-                 @Ciclo INT = 0,
-		         @Count INT = 0,
-		        @Count1 INT = 0,
-      @Modifica varchar(75) = 'MIGRACION_JUVAI_' + FORMAT(GETDATE(), 'yyyyMMdd');
-	 SET @fechaIni = DATEADD(DAY, -2, '2025-03-01'); -- Lunes de la semana anterior
-	 SET @fechaFin  = DATEADD(DAY, 2, GETDATE());
-	 select @fechaIni, @fechaFin
+--BEGIN TRAN
+DECLARE  @fechaIni DATE = DATEADD(DAY, -6,  GETDATE()),
+         @fechaFin DATE = GETDATE(),
+         @idPiscina INT = 0,
+	   @idEjecucion INT = 0,
+            @fecha DATE,
+	       @IdJuvai INT = 0,
+  @Modifica varchar(75) = 'MIGRACION_JUVAI_MOD' + FORMAT(GETDATE(), 'yyyyMMdd');
+	 --select @fechaIni, @fechaFin
 
 
 	   IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='AuditoriaMigracionJuvai' AND xtype='U')
@@ -21,20 +18,20 @@ DECLARE      @idPiscina INT = 0,
 			Fecha DATE,
 		);
 
-		IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='tmp_Recepcion_Siembra' AND xtype='U')
-		CREATE TABLE tmp_Recepcion_Siembra (
-			Piscina VARCHAR(50),
-			FechaInsigne DATE NULL,
-			FechaJuvai DATE NULL,
-			PlGramoCamJuvai DECIMAL(18,6) NULL,
-			PlGramoCamInsigne DECIMAL(18,6) NULL,
-			IdRecepcion INT NULL,
-			Ciclo INT NULL,
-			IdPiscina INT NULL,
-			IdPiscinaEjecucion INT NULL,
-			GuiaRemision VARCHAR(60),
-			IdJuvai INT NULL,
-		);
+		--IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='tmp_Recepcion_Siembra' AND xtype='U')
+		--CREATE TABLE tmp_Recepcion_Siembra (
+		--	Piscina VARCHAR(50),
+		--	FechaInsigne DATE NULL,
+		--	FechaJuvai DATE NULL,
+		--	PlGramoCamJuvai DECIMAL(18,6) NULL,
+		--	PlGramoCamInsigne DECIMAL(18,6) NULL,
+		--	IdRecepcion INT NULL,
+		--	Ciclo INT NULL,
+		--	IdPiscina INT NULL,
+		--	IdPiscinaEjecucion INT NULL,
+		--	GuiaRemision VARCHAR(60),
+		--	IdJuvai INT NULL,
+		--);
 
 		-- Verificar si la tabla temporal ya existe y eliminarla
 		IF OBJECT_ID('tempdb..#tmp_recepcion_siembra') IS NOT NULL
@@ -45,108 +42,136 @@ DECLARE      @idPiscina INT = 0,
 			procesado BIT,
 			idPiscina INT,
 			idPiscinaEjecucion INT,
-			idPiscinaEjecucionSig INT,
 			Ciclo INT,
 			Piscina VARCHAR(60),
 			Rol VARCHAR(6),
+			nbIdImagen  INT,
+            FechaTransaccion DATETIME NULL,
+			FechaRegistro DATETIME NULL,
+			PlGramoCamJuvai DECIMAL(18,5),
+			Cantidad INT NULL,
 		);
 
-		INSERT INTO #tmp_recepcion_siembra (idPiscina,idPiscinaEjecucion, idPiscinaEjecucionSig, Ciclo, Piscina, Rol, procesado)
-		SELECT DISTINCT ej.idPiscina, ej.idPiscinaEjecucion, ej.idPiscinaEjecucionSiguiente, ej.Ciclo, ej.keyPiscina, ej.rolPiscina, 0
+		INSERT INTO #tmp_recepcion_siembra (idPiscina,idPiscinaEjecucion, Ciclo, Piscina, Rol, procesado, nbIdImagen, FechaTransaccion, FechaRegistro, PlGramoCamJuvai, Cantidad )
+		SELECT DISTINCT  ej.idPiscina
+		               , ej.idPiscinaEjecucion
+					   , ej.Ciclo
+					   , ej.keyPiscina
+					   , ej.rolPiscina
+					   , 0
+					   , x.nbIdImagen
+					   , x.dtFechaRegistro
+					   , x.dtFechaRegistroEnvio
+					   , ((1.0 / NULLIF(x.nbAverageWeight, 0)) *1000)
+					   , x.nbNumeroAnimales
 		FROM  EjecucionesPiscinaView ej
 		     INNER JOIN [192.168.1.83].[IPSP_JUVAI].DBO.VW_BASEPESOMUESTRA x 
 		     ON x.txtClavePiscina COLLATE SQL_Latin1_General_CP1_CI_AS = ej.keyPiscina 
-		     AND x.nbIdPiscinaEjecucion=ej.idPiscinaEjecucion
-		WHERE ej.estado IN('EJE', 'INI') --AND CAST(x.dtFechaRegistro AS DATE)=@fecha
+		     AND x.nbIdPiscinaEjecucion = ej.idPiscinaEjecucion
+		WHERE ej.estado IN('EJE', 'INI') 
+		AND CAST(x.dtFechaRegistro AS DATE) BETWEEN @FechaIni AND @FechaFin
 		      AND x.nbidtipomuestra      = 1
-		      AND NOT EXISTS (SELECT * FROM AuditoriaMigracionJuvai x 
-		                  INNER JOIN tmp_Recepcion_Siembra y on x.IdInsigne=y.IdRecepcion
-						  WHERE x.TipoTransaccion='RECEPCION')
+			  AND ej.Ciclo               > 0
+		      AND NOT EXISTS (SELECT * FROM AuditoriaMigracionJuvai y
+						       WHERE y.IdJuvai=x.nbIdImagen  
+							   AND y.TipoTransaccion='RECEPCION')
 
 		
 		  SELECT * FROM #tmp_recepcion_siembra
 		  WHILE EXISTS(SELECT TOP 1 1 FROM #tmp_recepcion_siembra WHERE procesado = 0)
 		  BEGIN
-		       				SELECT TOP 1	
+		        SELECT TOP 1	
 	                    @idPiscina = idPiscina,
 				      @idEjecucion = idPiscinaEjecucion,
-		                    @Ciclo = Ciclo,
-			              @piscina = Piscina
+			                @fecha = FechaTransaccion,
+						  @IdJuvai = nbIdImagen
 		        FROM #tmp_recepcion_siembra 
 				WHERE procesado=0
-				order by idPiscina
+				ORDER BY idPiscina;
+				DECLARE @idRecepcion INT=0;
 		   
 
-						--SELECT (1.0 /NULLIF(nbSampleWeight,0)) AS PlGramoCamJuvai, CAST(x.dtFechaRegistro AS DATE) AS FechaJuvai 
-						--FROM [192.168.1.83].[IPSP_JUVAI].DBO.VW_BASEPESOMUESTRA x
-						--WHERE  CAST(x.dtFechaRegistro AS DATE)  = @fecha AND  txtClavePiscina=@piscina AND nbIdPiscinaEjecucion= @idEjecucion 
-						--AND x.nbidtipomuestra = 1
+                  IF EXISTS (SELECT   *
+							FROM proRecepcionEspecieDetalle d WITH(NOLOCK) 
+							INNER JOIN proRecepcionEspecie c WITH(NOLOCK) ON d.idRecepcion=c.idRecepcion
+							INNER JOIN #tmp_recepcion_siembra x ON d.idPiscina= x.idPiscina AND d.idPiscinaEjecucion=x.idPiscinaEjecucion
+							WHERE x.nbIdImagen    = @IdJuvai 
+							 AND c.fechaRecepcion = CAST(@fecha AS DATE)
+							 AND c.estado         = 'APR' 
+					         AND d.activo        = 1)
+					BEGIN
+							UPDATE d
+							 SET  @idRecepcion           = c.idRecepcion,
+							     d.plGramoCam            = x.PlGramoCamJuvai,
+							     d.fechaHoraModificacion = GETDATE(),
+								 d.estacionModificacion  = @Modifica							 
+							FROM proRecepcionEspecieDetalle d WITH(NOLOCK) 
+							INNER JOIN proRecepcionEspecie c WITH(NOLOCK) ON d.idRecepcion=c.idRecepcion
+							INNER JOIN #tmp_recepcion_siembra x ON d.idPiscina= x.idPiscina AND d.idPiscinaEjecucion=x.idPiscinaEjecucion
+							WHERE x.nbIdImagen    = @IdJuvai 
+							 AND c.fechaRecepcion = CAST(@fecha AS DATE)
+							 AND c.estado         = 'APR' 
+					         AND d.activo        = 1
 
-					    --  SELECT @piscina    AS Piscina
-						-- , r.fechaRecepcion AS  FechaRecepcion
-						-- , plGramoCam       AS PlGramoCamInsigne
-						-- , r.idRecepcion    AS IdRecepcion
-						-- , @Ciclo           AS Ciclo 
-						-- , rd.idPiscina     AS IdPiscina
-						-- , rd.idPiscinaEjecucion AS IdPiscinaEjecucion
-						-- FROM proRecepcionEspecieDetalle rd inner join proRecepcionEspecie r on r.idRecepcion = rd.idRecepcion
-						-- WHERE idPiscina=@idPiscina  and rd.idPiscinaEjecucion = @idEjecucion and r.estado='APR' AND rd.activo=1
+					   INSERT INTO AuditoriaMigracionJuvai(IdInsigne, IdJuvai, TipoTransaccion, Fecha)
+					   SELECT @idRecepcion, nbIdImagen, 'RECEPCION', GETDATE() 
+					   FROM #tmp_recepcion_siembra WHERE nbIdImagen = @IdJuvai 
+													 AND procesado	= 0 
+
+					END
+
 
 						-- Datos de INSIGNE
-						INSERT INTO tmp_Recepcion_Siembra (Piscina,FechaInsigne,FechaJuvai,PlGramoCamJuvai,PlGramoCamInsigne,IdRecepcion,Ciclo,IdPiscina,IdPiscinaEjecucion, GuiaRemision, IdJuvai)
-						SELECT 
-							@piscina,
-							r.fechaRecepcion,
-							z.FechaJuvai,
-							z.PlGramoCamJuvai,
-							plGramoCam,
-							r.idRecepcion,
-							@Ciclo,
-							rd.idPiscina,
-							rd.idPiscinaEjecucion,
-							r.guiasRemision,
-							z.Id
-						FROM proRecepcionEspecieDetalle rd WITH(NOLOCK) 
-							INNER JOIN proRecepcionEspecie r WITH(NOLOCK) 
-							  ON r.idRecepcion = rd.idRecepcion
-							LEFT JOIN(SELECT 
-									  CAST(x.dtFechaRegistro AS DATE) AS FechaJuvai,
-								      (1.0 / NULLIF(x.nbAverageWeight, 0)) *1000 AS PlGramoCamJuvai,
-									--nbAverageLength
-									--nbAverageWeight
-									--(1.0 / NULLIF(x.nbSampleWeight, 0)) AS PlGramoCamJuvai,
-									--x.txtClavePiscina AS ClavePiscina,
-									   y.idPiscina,
-									   x.nbIdPiscinaEjecucion AS IdPiscinaEjecucion,
-							           x.nbIdImagen AS Id
-								    FROM [192.168.1.83].[IPSP_JUVAI].DBO.VW_BASEPESOMUESTRA x
-								    INNER JOIN PiscinaUbicacion y 
-									ON x.txtClavePiscina  COLLATE SQL_Latin1_General_CP1_CI_AS=y.KeyPiscina
-								    WHERE --CAST(x.dtFechaRegistro AS DATE) BETWEEN  @fechaIni AND @fechaFin 
-										--AND 
-										x.txtClavePiscina COLLATE SQL_Latin1_General_CP1_CI_AS = @piscina 
-										AND x.nbIdPiscinaEjecucion = @idEjecucion 
-										AND x.nbidtipomuestra      = 1
-						     ) z ON z.idPiscina=rd.idPiscina AND z.IdPiscinaEjecucion=rd.idPiscinaEjecucion 
-						WHERE rd.idPiscina              = @idPiscina 
-							  AND rd.idPiscinaEjecucion = @idEjecucion 
-							  AND r.estado              = 'APR' 
-							  AND rd.activo             = 1
-							  AND z.FechaJuvai IS NOT NULL;
-		
-					UPDATE #tmp_recepcion_siembra SET procesado          = 1 
-					                              WHERE idPiscina        = @idPiscina
-												  AND idPiscinaEjecucion = @idEjecucion              	
-				                                  AND procesado	         = 0 
+						--INSERT INTO tmp_Recepcion_Siembra (Piscina,FechaInsigne,FechaJuvai,PlGramoCamJuvai,PlGramoCamInsigne,IdRecepcion,Ciclo,IdPiscina,IdPiscinaEjecucion, GuiaRemision, IdJuvai)
+						--SELECT 
+						--	@piscina,
+						--	r.fechaRecepcion,
+						--	z.FechaJuvai,
+						--	z.PlGramoCamJuvai,
+						--	plGramoCam,
+						--	r.idRecepcion,
+						--	rd.idPiscina,
+						--	rd.idPiscinaEjecucion,
+						--	r.guiasRemision,
+						--	z.Id
+						--FROM proRecepcionEspecieDetalle rd WITH(NOLOCK) 
+						--	INNER JOIN proRecepcionEspecie r WITH(NOLOCK) 
+						--	  ON r.idRecepcion = rd.idRecepcion
+						--	LEFT JOIN(SELECT 
+						--			  CAST(x.dtFechaRegistro AS DATE) AS FechaJuvai,
+						--		      (1.0 / NULLIF(x.nbAverageWeight, 0)) *1000 AS PlGramoCamJuvai,
+						--			--nbAverageLength
+						--			--nbAverageWeight
+						--			--(1.0 / NULLIF(x.nbSampleWeight, 0)) AS PlGramoCamJuvai,
+						--			--x.txtClavePiscina AS ClavePiscina,
+						--			   y.idPiscina,
+						--			   x.nbIdPiscinaEjecucion AS IdPiscinaEjecucion,
+						--	           x.nbIdImagen AS Id
+						--		    FROM [192.168.1.83].[IPSP_JUVAI].DBO.VW_BASEPESOMUESTRA x
+						--		    INNER JOIN PiscinaUbicacion y 
+						--			ON x.txtClavePiscina  COLLATE SQL_Latin1_General_CP1_CI_AS=y.KeyPiscina
+						--		    WHERE x.txtClavePiscina COLLATE SQL_Latin1_General_CP1_CI_AS = @piscina 
+						--				AND x.nbIdPiscinaEjecucion = @idEjecucion 
+						--				AND x.nbidtipomuestra      = 1
+						--				AND x.dtFechaRegistro IS NOT NULL
+						--     ) z ON z.idPiscina=rd.idPiscina AND z.IdPiscinaEjecucion=rd.idPiscinaEjecucion
+						--	   AND FechaJuvai = r.fechaRecepcion
+						--WHERE rd.idPiscina              = @idPiscina 
+						--	  AND rd.idPiscinaEjecucion = @idEjecucion 
+						--	  AND r.estado              = 'APR' 
+						--	  AND rd.activo             = 1
+						
 
-				   INSERT INTO AuditoriaMigracionJuvai(IdInsigne, IdJuvai, TipoTransaccion, Fecha)
-				   SELECT IdRecepcion, IdJuvai, 'RECEPCION', GETDATE() 
-				   FROM tmp_Recepcion_Siembra WHERE idPiscina        = @idPiscina
-											  AND idPiscinaEjecucion = @idEjecucion 
+		
+					UPDATE #tmp_recepcion_siembra SET procesado    = 1 
+					                              WHERE nbIdImagen = @IdJuvai            	
+				                                  AND procesado	   = 0 
+
 		  END
 DROP TABLE #tmp_recepcion_siembra
-SELECT * FROM tmp_Recepcion_Siembra
+--SELECT * FROM tmp_Recepcion_Siembra
 SELECT * FROM AuditoriaMigracionJuvai
+--ROLLBACK TRAN
 
 --TRUNCATE  TABLE tmp_Recepcion_Siembra
 --TRUNCATE  TABLE AuditoriaMigracionJuvai

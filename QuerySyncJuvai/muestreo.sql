@@ -9,6 +9,7 @@ DECLARE @FechaInicio DATE = DATEADD(DAY, -1, @FechaFin); -- Ayer
 		  @empresa VARCHAR(5),
 		  @division VARCHAR(5),
 		  @idPiscina INT,
+		  @idPiscinaEje INT,
 		  @tipoMuestreo VARCHAR(5)='';
 
 --Verificar si la tabla temporal ya existe y eliminarla
@@ -40,7 +41,7 @@ DECLARE @FechaInicio DATE = DATEADD(DAY, -1, @FechaFin); -- Ayer
 		);
 
        INSERT INTO #tmp_muestreo_cultivo (idPiscina,idPiscinaEjecucion, Ciclo, keyPiscina, Rol, procesado, Clasificacion,FMuestreo,
-	   Fregistro, UsuarioResponsable, idUsuario, Descripcion, Piscina, Cantidad, PlGramoCamJuvai, nbIdImagen, nombreSector, pesopromedio, longitudpromedio)
+	   Fregistro, UsuarioResponsable, idUsuario, Descripcion, Cantidad, PlGramoCamJuvai, nbIdImagen, nombreSector, pesopromedio, longitudpromedio)
 		SELECT DISTINCT ej.idPiscina, ej.idPiscinaEjecucion, ej.Ciclo, ej.keyPiscina, ej.rolPiscina, 0,
 		    CASE 
 				WHEN DATEPART(WEEKDAY, x.dtFechaRegistro) IN (5,6,7,1) THEN 'PES'
@@ -51,7 +52,6 @@ DECLARE @FechaInicio DATE = DATEADD(DAY, -1, @FechaFin); -- Ayer
 			x.txtUsuarioRegistro AS UsuarioResponsable,
 			x.nbIdUsuario AS idUsuario,
 			x.txtNombreMuestra AS Descripcion,
-			x.txtClavePiscina AS Piscina,
 			x.nbNumeroAnimales AS Cantidad,
 			(1.0 / NULLIF(x.nbAverageWeight, 0)) *1000 AS PlGramoCamJuvai,
 			x.nbIdImagen,
@@ -74,10 +74,11 @@ DECLARE @FechaInicio DATE = DATEADD(DAY, -1, @FechaFin); -- Ayer
 		  BEGIN
 				SELECT TOP 1	
 				   @id                = nbIdImagen,
-				   @idPiscina         = idPiscina
+				   @idPiscina         = idPiscina,
+				   @idPiscinaEje      = idPiscinaEjecucion
 		        FROM #tmp_muestreo_cultivo 
 				WHERE procesado=0
-				order by nbIdImagen;
+				ORDER BY nbIdImagen;
 
 				SET @tipoMuestreo ='PLONG';
 
@@ -86,6 +87,30 @@ DECLARE @FechaInicio DATE = DATEADD(DAY, -1, @FechaFin); -- Ayer
 						 --separamaos los secuenciles para la creacion
 					    DECLARE @ultimaSecuenciaCabecera INT=0, @ultimaSecuenciaDetalle INT =0;
 						SELECT @empresa= empresa, @division= division from maePiscina where idPiscina=@idPiscina
+						
+						UPDATE x SET x.Piscina = (SELECT TOP 1 y.nombre from maePiscina y where y.idPiscina=x.idPiscina AND y.activo=1) 
+						FROM #tmp_muestreo_cultivo x
+						WHERE x.nbIdImagen = @id AND x.procesado	 = 0
+
+
+						SELECT 
+										 det.idPiscina
+										,det.idPiscinaEjecucion
+										,SUM(det.cantidadTotal) AS cantidadTotalAnt
+										,ISNULL(ca.tipoMuestreoDetalle,'') AS tipoMuestreoDetalle --define los valores: pesoLongitudTotal y pesoGramosTotal 
+										,ISNULL(CASE WHEN CA.tipoMuestreoDetalle='PLONG' THEN SUM(det.pesoLongitudTotal)  END, 0) AS  pesoLongitudTotalAnt
+										,ISNULL(CASE WHEN CA.tipoMuestreoDetalle='PTALL' THEN SUM(det.pesoGramosTotal) END , 0) AS pesoGramosTotalAnt
+										,SUM(det.pesoPromedioReportado) AS pesoPromedioReportadoAnt
+										, ca.fechaMuestreo AS  fechaMuestreoAnt
+		     						INTO #tmp_muestreos
+						FROM   [IPSPCamaroneraProduccion].[dbo].proMuestreoPesoDetalle det
+							   INNER JOIN [IPSPCamaroneraProduccion].[dbo].proMuestreoPeso ca ON det.idMuestreo=ca.idMuestreo    
+						WHERE det.idPiscina= @idPiscina AND det.idPiscinaEjecucion=@idPiscinaEje
+						      AND ca.estado='APR' 
+							  AND det.activo= 1 
+						GROUP BY  det.idPiscina ,det.idPiscinaEjecucion, ca.tipoMuestreoDetalle, ca.fechaMuestreo
+						ORDER BY  ca.fechaMuestreo DESC
+
 
 						UPDATE proSecuencial SET ultimaSecuencia = ultimaSecuencia + 1 WHERE tabla = 'MuestreoPeso'
 						SELECT TOP 1 @ultimaSecuenciaCabecera    = ultimaSecuencia  FROM proSecuencial WHERE tabla = 'MuestreoPeso'  
@@ -134,7 +159,7 @@ DECLARE @FechaInicio DATE = DATEADD(DAY, -1, @FechaFin); -- Ayer
 								,CAST(mp.FMuestreo AS DATE)
 								,p.codigoCamaronera 
 								,p.codigoSector 
-								,mp.descripcion
+								,mp.Piscina + '(' + CAST(mp.PlGramoCamJuvai AS VARCHAR) +')'
 								,ISNULL(mp.idUsuario,0)
 								,mp.usuarioResponsable
 								,''
@@ -176,19 +201,19 @@ DECLARE @FechaInicio DATE = DATEADD(DAY, -1, @FechaFin); -- Ayer
 								   ,[estacionModificacion]
 								   ,[fechaHoraModificacion]
 								   ,[pesoPromedioReportado])
-		             SELECT   (ROW_NUMBER() OVER(ORDER BY  mp.nbIdImagen)  + @ultimaSecuenciaDetalle) 
+		             SELECT TOP 1  (ROW_NUMBER() OVER(ORDER BY  mp.nbIdImagen)  + @ultimaSecuenciaDetalle) 
 								  ,@ultimaSecuenciaCabecera
 								  ,1
 								  ,mp.idPiscina
 								  ,mp.Cantidad
 								  ,longitudPromedio
-								  ,0 longitudPromedioAnterior
-								  ,GETDATE() AS fechaPesoAnterior
+								  ,ISNULL(m.pesoLongitudTotalAnt,0)
+								  ,m.fechaMuestreoAnt
 								  ,longitudpromedio
 								  ,pesopromedio
-								  ,12 AS pesoGramosAnterior
+								  ,ISNULL(m.pesoGramosTotalAnt,0)
 								  ,CAST(mp.FMuestreo AS TIME) AS horaMuestreo
-								  ,idPiscinaEjecucion
+								  ,mp.idPiscinaEjecucion
 								  ,mp.Descripcion
 								  ,1
 							      ,'AdminPsCam'
@@ -200,6 +225,7 @@ DECLARE @FechaInicio DATE = DATEADD(DAY, -1, @FechaFin); -- Ayer
 								  ,NULL
 						FROM  #tmp_muestreo_cultivo mp 
 						INNER JOIN PiscinaUbicacion p WITH(NOLOCK) ON mp.idPiscina=p.idPiscina
+						LEFT JOIN #tmp_muestreos m ON mp.idPiscina =m.idPiscina AND mp.idPiscinaEjecucion=m.idPiscinaEjecucion
 						WHERE mp.nbIdImagen          = @id
 
 
@@ -302,12 +328,13 @@ DECLARE @FechaInicio DATE = DATEADD(DAY, -1, @FechaFin); -- Ayer
 			  END
              END
 			
-			       UPDATE #tmp_muestreo_cultivo SET procesado = 1 WHERE nbIdImagen = @id	AND 
-															  procesado	 = 0
-					INSERT INTO AuditoriaMigracionJuvai(IdInsigne, IdJuvai, TipoTransaccion, Fecha)
+			       UPDATE #tmp_muestreo_cultivo SET procesado = 1 WHERE nbIdImagen = @id AND procesado	 = 0
+				   INSERT INTO AuditoriaMigracionJuvai(IdInsigne, IdJuvai, TipoTransaccion, Fecha)
 				   SELECT @ultimaSecuenciaCabecera, mp.nbIdImagen, 'MUESTREO', GETDATE() 
-						FROM    #tmp_muestreo_cultivo mp  
-				        WHERE mp.nbIdImagen        = @id
+						        FROM    #tmp_muestreo_cultivo mp  
+				                WHERE mp.nbIdImagen        = @id
+
+				DROP TABLE #tmp_muestreos
 															  
         END	
 SELECT * FROM #tmp_muestreo_cultivo
