@@ -53,6 +53,7 @@ SET DATEFIRST 1;
 		     AND x.nbIdPiscinaEjecucion = ej.idPiscinaEjecucion
 			 INNER JOIN proTransferenciaEspecie c        on c.idPiscina = ej.idPiscina and c.idPiscinaEjecucion = ej.idPiscinaEjecucion
 			INNER JOIN proTransferenciaEspecieDetalle d on c.idTransferencia = d.idTransferencia
+			 INNER JOIN PiscinaUbicacion pu  on pu.idPiscina = ej.idPiscina
 		WHERE ej.estado IN('EJE', 'INI') 
 		      AND d.pesoPromedioTransferencia <=0
 	          AND c.estado IN('ING', 'APR') AND D.activo = 1
@@ -62,7 +63,7 @@ SET DATEFIRST 1;
 		      AND NOT EXISTS (SELECT * FROM AuditoriaMigracionJuvai y 
 						      WHERE y.IdJuvai         = x.nbIdImagen 
 							    AND y.TipoTransaccion = 'TRANSFERENCIA')
-		
+			 AND EXISTS (select top 1 1  from parZona z where z.codigo = pu.codigoZona and z.activo = 1 and (z.aplicaJuvaiPrecria = 1 or z.aplicaJuvaiEngorde = 1))
 		  --SELECT * FROM #tmp_transferencia
 		  WHILE EXISTS(SELECT TOP 1 1 FROM #tmp_transferencia WHERE procesado = 0)
 		  BEGIN
