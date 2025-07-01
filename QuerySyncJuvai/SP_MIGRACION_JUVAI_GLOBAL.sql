@@ -1,10 +1,14 @@
 CREATE PROCEDURE [dbo].[SP_MIGRACION_JUVAI_GLOBAL]    
-  @aplicaRollback BIT,
-  @fechaParametro DATE   
+  @aplicaRollback BIT = NULL,
+  @fechaParametro DATE= NULL   
 AS    
 BEGIN    
     BEGIN TRY    
         BEGIN TRANSACTION 
+    IF @fechaParametro IS NULL BEGIN set @fechaParametro= GETDATE(); END;
+	IF @aplicaRollback IS NULL BEGIN set @aplicaRollback= 0; END;  
+
+
 	IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='AuditoriaMigracionJuvai' AND xtype='U')
 	CREATE TABLE AuditoriaMigracionJuvai (
 		IdJuvai INT NULL,
